@@ -17,10 +17,14 @@
  *   Upgrading tree-sitter would be a separate breaking change.
  *
  * How this workaround works:
- *   1. tree-sitter-swift's own postinstall fails (npm warns but continues)
- *   2. This script runs as gitnexus's postinstall
- *   3. It removes the "actions" array from binding.gyp
- *   4. It rebuilds the native binding with the cleaned binding.gyp
+ *   tree-sitter-swift is listed as an optionalDependency, so npm won't abort
+ *   if its native build fails. However, npm may also remove the package
+ *   entirely after a failed build. This script handles both cases:
+ *
+ *   1. If tree-sitter-swift exists but has no native binding:
+ *      patch binding.gyp and rebuild
+ *   2. If tree-sitter-swift was removed by npm after build failure:
+ *      re-install with --ignore-scripts, patch, and rebuild
  *
  * TODO: Remove this script when tree-sitter is upgraded to ^0.22.x,
  *       which allows using tree-sitter-swift@0.7.1+ directly.
@@ -29,46 +33,66 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
-const swiftDir = path.join(__dirname, '..', 'node_modules', 'tree-sitter-swift');
+const nodeModules = path.join(__dirname, '..', 'node_modules');
+const swiftDir = path.join(nodeModules, 'tree-sitter-swift');
 const bindingPath = path.join(swiftDir, 'binding.gyp');
 
-try {
-  if (!fs.existsSync(bindingPath)) {
-    process.exit(0);
-  }
-
+function patchAndRebuild() {
   const content = fs.readFileSync(bindingPath, 'utf8');
-  let needsRebuild = false;
 
   if (content.includes('"actions"')) {
-    // Strip Python-style comments (#) before JSON parsing
-    const cleaned = content.replace(/#[^\n]*/g, '');
+    // Strip Python-style comments (#) and trailing commas before JSON parsing
+    // binding.gyp uses GYP format which allows both, but JSON.parse does not
+    const cleaned = content
+      .replace(/#[^\n]*/g, '')
+      .replace(/,\s*([}\]])/g, '$1');
     const gyp = JSON.parse(cleaned);
 
     if (gyp.targets && gyp.targets[0] && gyp.targets[0].actions) {
       delete gyp.targets[0].actions;
       fs.writeFileSync(bindingPath, JSON.stringify(gyp, null, 2) + '\n');
       console.log('[tree-sitter-swift] Patched binding.gyp (removed actions array)');
-      needsRebuild = true;
     }
   }
 
-  // Check if native binding exists
+  // Check if native binding already exists
   const bindingNode = path.join(swiftDir, 'build', 'Release', 'tree_sitter_swift_binding.node');
-  if (!fs.existsSync(bindingNode)) {
-    needsRebuild = true;
+  if (fs.existsSync(bindingNode)) {
+    return; // Already built
   }
 
-  if (needsRebuild) {
-    console.log('[tree-sitter-swift] Rebuilding native binding...');
-    execSync('npx node-gyp rebuild', {
-      cwd: swiftDir,
+  console.log('[tree-sitter-swift] Building native binding...');
+  execSync('npx node-gyp rebuild', {
+    cwd: swiftDir,
+    stdio: 'pipe',
+    timeout: 120000,
+  });
+  console.log('[tree-sitter-swift] Native binding built successfully');
+}
+
+try {
+  // Case 1: package exists (npm kept it despite failed build)
+  if (fs.existsSync(bindingPath)) {
+    patchAndRebuild();
+    process.exit(0);
+  }
+
+  // Case 2: package was removed by npm after build failure — re-install without scripts
+  if (!fs.existsSync(swiftDir)) {
+    console.log('[tree-sitter-swift] Package missing, re-installing with --ignore-scripts...');
+    execSync('npm install tree-sitter-swift@0.6.0 --ignore-scripts --no-save', {
+      cwd: path.join(__dirname, '..'),
       stdio: 'pipe',
-      timeout: 120000,
+      timeout: 60000,
     });
-    console.log('[tree-sitter-swift] Native binding built successfully');
+  }
+
+  if (fs.existsSync(bindingPath)) {
+    patchAndRebuild();
+  } else {
+    console.warn('[tree-sitter-swift] Could not install package. Swift support will be disabled.');
   }
 } catch (err) {
   console.warn('[tree-sitter-swift] Could not build native binding:', err.message);
-  console.warn('[tree-sitter-swift] You may need to manually run: cd node_modules/tree-sitter-swift && npx node-gyp rebuild');
+  console.warn('[tree-sitter-swift] Swift files will be skipped during analysis.');
 }
