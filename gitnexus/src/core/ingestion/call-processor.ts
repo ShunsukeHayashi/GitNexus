@@ -80,6 +80,11 @@ const findEnclosingFunction = (
                          current.children?.find((c: any) => c.type === 'identifier' || c.type === 'property_identifier');
         if (nameNode) {
           funcName = nameNode.text;
+          // C++ template functions: function_definition inside template_declaration
+          // are registered as 'Template' nodes (not 'Function'), so match that label.
+          if (current.type === 'function_definition' && current.parent?.type === 'template_declaration') {
+            label = 'Template';
+          }
         } else {
           // C/C++: name nested inside declarator -> function_declarator -> identifier
           const declarator = current.childForFieldName?.('declarator');
@@ -87,6 +92,10 @@ const findEnclosingFunction = (
             const innerDecl = declarator.childForFieldName?.('declarator');
             if (innerDecl?.type === 'identifier') {
               funcName = innerDecl.text;
+              // Template function with declarator-style name
+              if (current.parent?.type === 'template_declaration') {
+                label = 'Template';
+              }
             } else if (innerDecl?.type === 'qualified_identifier') {
               const nameIdent = innerDecl.childForFieldName?.('name') ||
                 innerDecl.children?.find((c: any) => c.type === 'identifier');

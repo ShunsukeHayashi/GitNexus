@@ -185,14 +185,30 @@ const isNodeExported = (node: any, name: string, language: string): boolean => {
       }
       return false;
 
-    case 'csharp':
+    case 'csharp': {
+      // In C# AST, `modifier` nodes are SIBLINGS of the name node inside the
+      // declaration (e.g. method_declaration, class_declaration). Walking up
+      // from the name node reaches the declaration, then we check its children.
+      const CSHARP_DECL_TYPES = new Set([
+        'method_declaration', 'local_function_statement', 'constructor_declaration',
+        'class_declaration', 'interface_declaration', 'struct_declaration',
+        'enum_declaration', 'record_declaration', 'delegate_declaration',
+        'property_declaration', 'field_declaration', 'event_declaration',
+        'namespace_declaration',
+      ]);
       while (current) {
-        if (current.type === 'modifier' || current.type === 'modifiers') {
-          if (current.text?.includes('public')) return true;
+        if (CSHARP_DECL_TYPES.has(current.type)) {
+          // Check siblings: any child of the declaration that is a modifier with text 'public'
+          for (let i = 0; i < current.childCount; i++) {
+            const child = current.child(i);
+            if (child?.type === 'modifier' && child.text === 'public') return true;
+          }
+          return false;
         }
         current = current.parent;
       }
       return false;
+    }
 
     case 'go':
       if (name.length === 0) return false;
@@ -315,6 +331,11 @@ const findEnclosingFunctionId = (node: any, filePath: string): string | null => 
           current.children?.find((c: any) => c.type === 'identifier' || c.type === 'property_identifier');
         if (nameNode) {
           funcName = nameNode.text;
+          // C++ template functions: function_definition inside template_declaration
+          // are registered as 'Template' nodes (not 'Function'), so match that label.
+          if (current.type === 'function_definition' && current.parent?.type === 'template_declaration') {
+            label = 'Template';
+          }
         } else {
           // C/C++: name is nested in declarator -> function_declarator -> identifier/qualified_identifier
           const declarator = current.childForFieldName?.('declarator');
@@ -322,6 +343,10 @@ const findEnclosingFunctionId = (node: any, filePath: string): string | null => 
             const innerDecl = declarator.childForFieldName?.('declarator');
             if (innerDecl?.type === 'identifier') {
               funcName = innerDecl.text;
+              // Template function with qualified-style declarator (rare, but check)
+              if (current.parent?.type === 'template_declaration') {
+                label = 'Template';
+              }
             } else if (innerDecl?.type === 'qualified_identifier') {
               // C++ qualified name: Foo::bar — captured as 'Method' node
               const nameIdent = innerDecl.childForFieldName?.('name') ||
