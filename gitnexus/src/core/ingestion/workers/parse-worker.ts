@@ -15,14 +15,30 @@ import Ruby from 'tree-sitter-ruby';
 import { createRequire } from 'node:module';
 import { SupportedLanguages } from '../../../config/supported-languages.js';
 import { LANGUAGE_QUERIES } from '../tree-sitter-queries.js';
+import { getTreeSitterBufferSize, TREE_SITTER_MAX_BUFFER } from '../constants.js';
 
 // tree-sitter-swift is an optionalDependency — may not be installed
 const _require = createRequire(import.meta.url);
 let Swift: any = null;
 try { Swift = _require('tree-sitter-swift'); } catch {}
-import { findSiblingChild, getLanguageFromFilename } from '../utils.js';
+import { 
+  getLanguageFromFilename,
+  FUNCTION_NODE_TYPES,
+  extractFunctionName,
+  isBuiltInOrNoise,
+  getDefinitionNodeFromCaptures,
+  findEnclosingClassId,
+  extractMethodSignature,
+  countCallArguments,
+  inferCallForm,
+  extractReceiverName
+} from '../utils.js';
+import { buildTypeEnv, lookupTypeEnv } from '../type-env.js';
+import { isNodeExported } from '../export-detection.js';
 import { detectFrameworkFromAST } from '../framework-detection.js';
 import { generateId } from '../../../lib/utils.js';
+import { extractNamedBindings } from '../named-binding-extraction.js';
+import { appendKotlinWildcard } from '../resolvers/index.js';
 
 // ============================================================================
 // Types for serializable results
@@ -36,11 +52,13 @@ interface ParsedNode {
     filePath: string;
     startLine: number;
     endLine: number;
-    language: string;
+    language: SupportedLanguages;
     isExported: boolean;
     astFrameworkMultiplier?: number;
     astFrameworkReason?: string;
     description?: string;
+    parameterCount?: number;
+    returnType?: string;
   };
 }
 
@@ -48,7 +66,7 @@ interface ParsedRelationship {
   id: string;
   sourceId: string;
   targetId: string;
-  type: 'DEFINES';
+  type: 'DEFINES' | 'HAS_METHOD';
   confidence: number;
   reason: string;
 }
@@ -58,12 +76,16 @@ interface ParsedSymbol {
   name: string;
   nodeId: string;
   type: string;
+  parameterCount?: number;
+  ownerId?: string;
 }
 
 export interface ExtractedImport {
   filePath: string;
   rawImportPath: string;
-  language: string;
+  language: SupportedLanguages;
+  /** Named bindings from the import (e.g., import {User as U} → [{local:'U', exported:'User'}]) */
+  namedBindings?: { local: string; exported: string }[];
 }
 
 export interface ExtractedCall {
@@ -71,6 +93,13 @@ export interface ExtractedCall {
   calledName: string;
   /** generateId of enclosing function, or generateId('File', filePath) for top-level */
   sourceId: string;
+  argCount?: number;
+  /** Discriminates free function calls from member/constructor calls */
+  callForm?: 'free' | 'member' | 'constructor';
+  /** Simple identifier of the receiver for member calls (e.g., 'user' in user.save()) */
+  receiverName?: string;
+  /** Resolved type name of the receiver (e.g., 'User' for user.save() when user: User) */
+  receiverTypeName?: string;
 }
 
 export interface ExtractedHeritage {
@@ -140,215 +169,18 @@ const setLanguage = (language: SupportedLanguages, filePath: string): void => {
   parser.setLanguage(lang);
 };
 
-// ============================================================================
-// Export detection (copied — needs AST parent traversal, can't cross threads)
-// ============================================================================
-
-const isNodeExported = (node: any, name: string, language: string): boolean => {
-  let current = node;
-
-  switch (language) {
-    case 'javascript':
-    case 'typescript':
-      while (current) {
-        const type = current.type;
-        if (type === 'export_statement' ||
-            type === 'export_specifier' ||
-            type === 'lexical_declaration' && current.parent?.type === 'export_statement') {
-          return true;
-        }
-        if (current.text?.startsWith('export ')) {
-          return true;
-        }
-        current = current.parent;
-      }
-      return false;
-
-    case 'python':
-      return !name.startsWith('_');
-
-    case 'java':
-      while (current) {
-        if (current.parent) {
-          const parent = current.parent;
-          for (let i = 0; i < parent.childCount; i++) {
-            const child = parent.child(i);
-            if (child?.type === 'modifiers' && child.text?.includes('public')) {
-              return true;
-            }
-          }
-          if (parent.type === 'method_declaration' || parent.type === 'constructor_declaration') {
-            if (parent.text?.trimStart().startsWith('public')) {
-              return true;
-            }
-          }
-        }
-        current = current.parent;
-      }
-      return false;
-
-    case 'csharp':
-      while (current) {
-        if (current.type === 'modifier' || current.type === 'modifiers') {
-          if (current.text?.includes('public')) return true;
-        }
-        current = current.parent;
-      }
-      return false;
-
-    case 'go':
-      if (name.length === 0) return false;
-      const first = name[0];
-      return first === first.toUpperCase() && first !== first.toLowerCase();
-
-    case 'rust':
-      while (current) {
-        if (current.type === 'visibility_modifier') {
-          if (current.text?.includes('pub')) return true;
-        }
-        current = current.parent;
-      }
-      return false;
-
-    // Kotlin: Default visibility is public (unlike Java)
-    // visibility_modifier is inside modifiers, a sibling of the name node within the declaration
-    case 'kotlin':
-      while (current) {
-        if (current.parent) {
-          const visMod = findSiblingChild(current.parent, 'modifiers', 'visibility_modifier');
-          if (visMod) {
-            const text = visMod.text;
-            if (text === 'private' || text === 'internal' || text === 'protected') return false;
-            if (text === 'public') return true;
-          }
-        }
-        current = current.parent;
-      }
-      // No visibility modifier = public (Kotlin default)
-      return true;
-
-    case 'c':
-    case 'cpp':
-      return false;
-
-    case 'php':
-      // Top-level classes/interfaces/traits are always accessible
-      // Methods/properties are exported only if they have 'public' modifier
-      while (current) {
-        if (current.type === 'class_declaration' ||
-            current.type === 'interface_declaration' ||
-            current.type === 'trait_declaration' ||
-            current.type === 'enum_declaration') {
-          return true;
-        }
-        if (current.type === 'visibility_modifier') {
-          return current.text === 'public';
-        }
-        current = current.parent;
-      }
-      // Top-level functions (no parent class) are globally accessible
-      return true;
-
-    // Ruby: All top-level definitions are public by default
-    case 'ruby':
-      return true;
-    case 'swift':
-      while (current) {
-        if (current.type === 'modifiers' || current.type === 'visibility_modifier') {
-          const text = current.text || '';
-          if (text.includes('public') || text.includes('open')) return true;
-        }
-        current = current.parent;
-      }
-      return false;
-
-    default:
-      return false;
-  }
-};
+// isNodeExported imported from ../export-detection.js (shared module)
 
 // ============================================================================
 // Enclosing function detection (for call extraction)
 // ============================================================================
-
-const FUNCTION_NODE_TYPES = new Set([
-  'function_declaration', 'arrow_function', 'function_expression',
-  'method_definition', 'generator_function_declaration',
-  'function_definition', 'async_function_declaration', 'async_arrow_function',
-  'method_declaration', 'constructor_declaration',
-  'local_function_statement', 'function_item', 'impl_item',
-  'anonymous_function_creation_expression',  // PHP anonymous functions
-  'method',           // Ruby: def foo
-  'singleton_method', // Ruby: def self.foo
-  'init_declaration', 'deinit_declaration',  // Swift initializers/deinitializers
-  // Kotlin (function_declaration already included above via JS/TS)
-  'anonymous_function', 'lambda_literal',
-  // Kotlin
-  'lambda_literal',
-  // PHP
-  'anonymous_function',
-  // Swift initializers/deinitializers
-  'init_declaration', 'deinit_declaration',
-]);
 
 /** Walk up AST to find enclosing function, return its generateId or null for top-level */
 const findEnclosingFunctionId = (node: any, filePath: string): string | null => {
   let current = node.parent;
   while (current) {
     if (FUNCTION_NODE_TYPES.has(current.type)) {
-      let funcName: string | null = null;
-      let label = 'Function';
-
-      if (current.type === 'init_declaration' || current.type === 'deinit_declaration') {
-        const funcName = current.type === 'init_declaration' ? 'init' : 'deinit';
-        const label = 'Constructor';
-        return generateId(label, `${filePath}:${funcName}`);
-      }
-
-      if (['function_declaration', 'function_definition', 'async_function_declaration',
-           'generator_function_declaration', 'function_item'].includes(current.type)) {
-        const nameNode = current.childForFieldName?.('name') ||
-          current.children?.find((c: any) => c.type === 'identifier' || c.type === 'property_identifier');
-        funcName = nameNode?.text;
-      } else if (current.type === 'impl_item') {
-        const funcItem = current.children?.find((c: any) => c.type === 'function_item');
-        if (funcItem) {
-          const nameNode = funcItem.childForFieldName?.('name') ||
-            funcItem.children?.find((c: any) => c.type === 'identifier');
-          funcName = nameNode?.text;
-          label = 'Method';
-        }
-      } else if (current.type === 'method_definition') {
-        const nameNode = current.childForFieldName?.('name') ||
-          current.children?.find((c: any) => c.type === 'property_identifier');
-        funcName = nameNode?.text;
-        label = 'Method';
-      } else if (current.type === 'method_declaration' || current.type === 'constructor_declaration') {
-        const nameNode = current.childForFieldName?.('name') ||
-          current.children?.find((c: any) => c.type === 'identifier');
-        funcName = nameNode?.text;
-        label = 'Method';
-      } else if (current.type === 'method') {
-        // Ruby instance method: def foo
-        const nameNode = current.childForFieldName?.('name') ||
-          current.children?.find((c: any) => c.type === 'identifier');
-        funcName = nameNode?.text;
-        label = 'Method';
-      } else if (current.type === 'singleton_method') {
-        // Ruby class method: def self.foo
-        const nameNode = current.childForFieldName?.('name') ||
-          current.children?.find((c: any) => c.type === 'identifier');
-        funcName = nameNode?.text;
-        label = 'Function';
-      } else if (current.type === 'arrow_function' || current.type === 'function_expression') {
-        const parent = current.parent;
-        if (parent?.type === 'variable_declarator') {
-          const nameNode = parent.childForFieldName?.('name') ||
-            parent.children?.find((c: any) => c.type === 'identifier');
-          funcName = nameNode?.text;
-        }
-      }
-
+      const { funcName, label } = extractFunctionName(current);
       if (funcName) {
         return generateId(label, `${filePath}:${funcName}`);
       }
@@ -357,133 +189,6 @@ const findEnclosingFunctionId = (node: any, filePath: string): string | null => 
   }
   return null;
 };
-
-const BUILT_INS = new Set([
-  // JavaScript/TypeScript
-  'console', 'log', 'warn', 'error', 'info', 'debug',
-  'setTimeout', 'setInterval', 'clearTimeout', 'clearInterval',
-  'parseInt', 'parseFloat', 'isNaN', 'isFinite',
-  'encodeURI', 'decodeURI', 'encodeURIComponent', 'decodeURIComponent',
-  'JSON', 'parse', 'stringify',
-  'Object', 'Array', 'String', 'Number', 'Boolean', 'Symbol', 'BigInt',
-  'Map', 'Set', 'WeakMap', 'WeakSet',
-  'Promise', 'resolve', 'reject', 'then', 'catch', 'finally',
-  'Math', 'Date', 'RegExp', 'Error',
-  'require', 'import', 'export', 'fetch', 'Response', 'Request',
-  'useState', 'useEffect', 'useCallback', 'useMemo', 'useRef', 'useContext',
-  'useReducer', 'useLayoutEffect', 'useImperativeHandle', 'useDebugValue',
-  'createElement', 'createContext', 'createRef', 'forwardRef', 'memo', 'lazy',
-  'map', 'filter', 'reduce', 'forEach', 'find', 'findIndex', 'some', 'every',
-  'includes', 'indexOf', 'slice', 'splice', 'concat', 'join', 'split',
-  'push', 'pop', 'shift', 'unshift', 'sort', 'reverse',
-  'keys', 'values', 'entries', 'assign', 'freeze', 'seal',
-  'hasOwnProperty', 'toString', 'valueOf',
-  // Python
-  'print', 'len', 'range', 'str', 'int', 'float', 'list', 'dict', 'set', 'tuple',
-  'open', 'read', 'write', 'close', 'append', 'extend', 'update',
-  'super', 'type', 'isinstance', 'issubclass', 'getattr', 'setattr', 'hasattr',
-  'enumerate', 'zip', 'sorted', 'reversed', 'min', 'max', 'sum', 'abs',
-  // Kotlin stdlib (IMPORTANT: keep in sync with call-processor.ts BUILT_IN_NAMES)
-  'println', 'print', 'readLine', 'require', 'requireNotNull', 'check', 'assert', 'lazy', 'error',
-  'listOf', 'mapOf', 'setOf', 'mutableListOf', 'mutableMapOf', 'mutableSetOf',
-  'arrayOf', 'sequenceOf', 'also', 'apply', 'run', 'with', 'takeIf', 'takeUnless',
-  'TODO', 'buildString', 'buildList', 'buildMap', 'buildSet',
-  'repeat', 'synchronized',
-  // Kotlin coroutine builders & scope functions
-  'launch', 'async', 'runBlocking', 'withContext', 'coroutineScope',
-  'supervisorScope', 'delay',
-  // Kotlin Flow operators
-  'flow', 'flowOf', 'collect', 'emit', 'onEach', 'catch',
-  'buffer', 'conflate', 'distinctUntilChanged',
-  'flatMapLatest', 'flatMapMerge', 'combine',
-  'stateIn', 'shareIn', 'launchIn',
-  // Kotlin infix stdlib functions
-  'to', 'until', 'downTo', 'step',
-  // C/C++ standard library
-  'printf', 'fprintf', 'sprintf', 'snprintf', 'vprintf', 'vfprintf', 'vsprintf', 'vsnprintf',
-  'scanf', 'fscanf', 'sscanf',
-  'malloc', 'calloc', 'realloc', 'free', 'memcpy', 'memmove', 'memset', 'memcmp',
-  'strlen', 'strcpy', 'strncpy', 'strcat', 'strncat', 'strcmp', 'strncmp', 'strstr', 'strchr', 'strrchr',
-  'atoi', 'atol', 'atof', 'strtol', 'strtoul', 'strtoll', 'strtoull', 'strtod',
-  'sizeof', 'offsetof', 'typeof',
-  'assert', 'abort', 'exit', '_exit',
-  'fopen', 'fclose', 'fread', 'fwrite', 'fseek', 'ftell', 'rewind', 'fflush', 'fgets', 'fputs',
-  // Linux kernel common macros/helpers (not real call targets)
-  'likely', 'unlikely', 'BUG', 'BUG_ON', 'WARN', 'WARN_ON', 'WARN_ONCE',
-  'IS_ERR', 'PTR_ERR', 'ERR_PTR', 'IS_ERR_OR_NULL',
-  'ARRAY_SIZE', 'container_of', 'list_for_each_entry', 'list_for_each_entry_safe',
-  'min', 'max', 'clamp', 'abs', 'swap',
-  'pr_info', 'pr_warn', 'pr_err', 'pr_debug', 'pr_notice', 'pr_crit', 'pr_emerg',
-  'printk', 'dev_info', 'dev_warn', 'dev_err', 'dev_dbg',
-  'GFP_KERNEL', 'GFP_ATOMIC',
-  'spin_lock', 'spin_unlock', 'spin_lock_irqsave', 'spin_unlock_irqrestore',
-  'mutex_lock', 'mutex_unlock', 'mutex_init',
-  'kfree', 'kmalloc', 'kzalloc', 'kcalloc', 'krealloc', 'kvmalloc', 'kvfree',
-  'get', 'put',
-  // PHP built-ins
-  'echo', 'isset', 'empty', 'unset', 'list', 'array', 'compact', 'extract',
-  'count', 'strlen', 'strpos', 'strrpos', 'substr', 'strtolower', 'strtoupper', 'trim',
-  'ltrim', 'rtrim', 'str_replace', 'str_contains', 'str_starts_with', 'str_ends_with',
-  'sprintf', 'vsprintf', 'printf', 'number_format',
-  'array_map', 'array_filter', 'array_reduce', 'array_push', 'array_pop', 'array_shift',
-  'array_unshift', 'array_slice', 'array_splice', 'array_merge', 'array_keys', 'array_values',
-  'array_key_exists', 'in_array', 'array_search', 'array_unique', 'usort', 'rsort',
-  'json_encode', 'json_decode', 'serialize', 'unserialize',
-  'intval', 'floatval', 'strval', 'boolval', 'is_null', 'is_string', 'is_int', 'is_array',
-  'is_object', 'is_numeric', 'is_bool', 'is_float',
-  'var_dump', 'print_r', 'var_export',
-  'date', 'time', 'strtotime', 'mktime', 'microtime',
-  'file_exists', 'file_get_contents', 'file_put_contents', 'is_file', 'is_dir',
-  'preg_match', 'preg_match_all', 'preg_replace', 'preg_split',
-  'header', 'session_start', 'session_destroy', 'ob_start', 'ob_end_clean', 'ob_get_clean',
-  'dd', 'dump',
-  // Ruby built-ins and Kernel methods
-  'puts', 'print', 'p', 'pp', 'warn', 'raise', 'fail',
-  'require', 'require_relative', 'load', 'autoload',
-  'include', 'extend', 'prepend',
-  'attr_accessor', 'attr_reader', 'attr_writer',
-  'public', 'private', 'protected', 'module_function',
-  'lambda', 'proc', 'block_given?',
-  'nil?', 'is_a?', 'kind_of?', 'instance_of?', 'respond_to?',
-  'freeze', 'frozen?', 'dup', 'clone', 'tap', 'then', 'yield_self',
-  // Ruby enumerables
-  'each', 'map', 'select', 'reject', 'find', 'detect', 'collect',
-  'inject', 'reduce', 'flat_map', 'each_with_object', 'each_with_index',
-  'any?', 'all?', 'none?', 'count', 'first', 'last',
-  'sort', 'sort_by', 'min', 'max', 'min_by', 'max_by',
-  'group_by', 'partition', 'zip', 'compact', 'flatten', 'uniq',
-  // Swift/iOS built-ins and standard library
-  'print', 'debugPrint', 'dump', 'fatalError', 'precondition', 'preconditionFailure',
-  'assert', 'assertionFailure', 'NSLog',
-  'abs', 'min', 'max', 'zip', 'stride', 'sequence', 'repeatElement',
-  'swap', 'withUnsafePointer', 'withUnsafeMutablePointer', 'withUnsafeBytes',
-  'autoreleasepool', 'unsafeBitCast', 'unsafeDowncast', 'numericCast',
-  'type', 'MemoryLayout',
-  // Swift collection/string methods (common noise)
-  'map', 'flatMap', 'compactMap', 'filter', 'reduce', 'forEach', 'contains',
-  'first', 'last', 'prefix', 'suffix', 'dropFirst', 'dropLast',
-  'sorted', 'reversed', 'enumerated', 'joined', 'split',
-  'append', 'insert', 'remove', 'removeAll', 'removeFirst', 'removeLast',
-  'isEmpty', 'count', 'index', 'startIndex', 'endIndex',
-  // UIKit/Foundation common methods (noise in call graph)
-  'addSubview', 'removeFromSuperview', 'layoutSubviews', 'setNeedsLayout',
-  'layoutIfNeeded', 'setNeedsDisplay', 'invalidateIntrinsicContentSize',
-  'addTarget', 'removeTarget', 'addGestureRecognizer',
-  'addConstraint', 'addConstraints', 'removeConstraint', 'removeConstraints',
-  'NSLocalizedString', 'Bundle',
-  'reloadData', 'reloadSections', 'reloadRows', 'performBatchUpdates',
-  'register', 'dequeueReusableCell', 'dequeueReusableSupplementaryView',
-  'beginUpdates', 'endUpdates', 'insertRows', 'deleteRows', 'insertSections', 'deleteSections',
-  'present', 'dismiss', 'pushViewController', 'popViewController', 'popToRootViewController',
-  'performSegue', 'prepare',
-  // GCD / async
-  'DispatchQueue', 'async', 'sync', 'asyncAfter',
-  'Task', 'withCheckedContinuation', 'withCheckedThrowingContinuation',
-  // Combine
-  'sink', 'store', 'assign', 'receive', 'subscribe',
-  // Notification / KVO
-  'addObserver', 'removeObserver', 'post', 'NotificationCenter',
-]);
 
 // ============================================================================
 // Label detection from capture map
@@ -519,50 +224,8 @@ const getLabelFromCaptures = (captureMap: Record<string, any>): string | null =>
   return 'CodeElement';
 };
 
-const DEFINITION_CAPTURE_KEYS = [
-  'definition.function',
-  'definition.class',
-  'definition.interface',
-  'definition.method',
-  'definition.struct',
-  'definition.enum',
-  'definition.namespace',
-  'definition.module',
-  'definition.trait',
-  'definition.impl',
-  'definition.type',
-  'definition.const',
-  'definition.static',
-  'definition.typedef',
-  'definition.macro',
-  'definition.union',
-  'definition.property',
-  'definition.record',
-  'definition.delegate',
-  'definition.annotation',
-  'definition.constructor',
-  'definition.template',
-] as const;
+// DEFINITION_CAPTURE_KEYS and getDefinitionNodeFromCaptures imported from ../utils.js
 
-const getDefinitionNodeFromCaptures = (captureMap: Record<string, any>): any | null => {
-  for (const key of DEFINITION_CAPTURE_KEYS) {
-    if (captureMap[key]) return captureMap[key];
-  }
-  return null;
-};
-
-/**
- * Append .* to a Kotlin import path if the AST has a wildcard_import sibling node.
- * Pure function — returns a new string without mutating the input.
- */
-const appendKotlinWildcard = (importPath: string, importNode: any): string => {
-  for (let i = 0; i < importNode.childCount; i++) {
-    if (importNode.child(i)?.type === 'wildcard_import') {
-      return importPath.endsWith('.*') ? importPath : `${importPath}.*`;
-    }
-  }
-  return importPath;
-};
 
 // ============================================================================
 // Process a batch of files
@@ -1135,28 +798,39 @@ const processFileGroup = (
   try {
     const lang = parser.getLanguage();
     query = new Parser.Query(lang, queryString);
-  } catch {
+  } catch (err) {
+    const message = `Query compilation failed for ${language}: ${err instanceof Error ? err.message : String(err)}`;
+    if (parentPort) {
+      parentPort.postMessage({ type: 'warning', message });
+    } else {
+      console.warn(message);
+    }
     return;
   }
 
   for (const file of files) {
-    // Skip very large files — they can crash tree-sitter or cause OOM
-    if (file.content.length > 512 * 1024) continue;
+    // Skip files larger than the max tree-sitter buffer (32 MB)
+    if (file.content.length > TREE_SITTER_MAX_BUFFER) continue;
 
     let tree;
     try {
-      tree = parser.parse(file.content, undefined, { bufferSize: 1024 * 256 });
-    } catch {
+      tree = parser.parse(file.content, undefined, { bufferSize: getTreeSitterBufferSize(file.content.length) });
+    } catch (err) {
+      console.warn(`Failed to parse file ${file.path}: ${err instanceof Error ? err.message : String(err)}`);
       continue;
     }
 
     result.fileCount++;
     onFileProcessed?.();
 
+    // Build per-file TypeEnv from explicit type annotations (for receiver resolution)
+    const typeEnv = buildTypeEnv(tree, language);
+
     let matches;
     try {
       matches = query.matches(tree.rootNode);
-    } catch {
+    } catch (err) {
+      console.warn(`Query execution failed for ${file.path}: ${err instanceof Error ? err.message : String(err)}`);
       continue;
     }
 
@@ -1171,10 +845,12 @@ const processFileGroup = (
         const rawImportPath = language === SupportedLanguages.Kotlin
           ? appendKotlinWildcard(captureMap['import.source'].text.replace(/['"<>]/g, ''), captureMap['import'])
           : captureMap['import.source'].text.replace(/['"<>]/g, '');
+        const namedBindings = extractNamedBindings(captureMap['import'], language);
         result.imports.push({
           filePath: file.path,
           rawImportPath,
           language: language,
+          ...(namedBindings ? { namedBindings } : {}),
         });
         continue;
       }
@@ -1281,7 +957,7 @@ const processFileGroup = (
             }
 
             // Regular Ruby call (skip built-ins)
-            if (!BUILT_INS.has(calledName)) {
+            if (!isBuiltInOrNoise(calledName)) {
               const sourceId = findEnclosingFunctionId(callNode, file.path)
                 || generateId('File', file.path);
               result.calls.push({ filePath: file.path, calledName, sourceId });
@@ -1289,11 +965,22 @@ const processFileGroup = (
             continue;
           }
 
-          if (!BUILT_INS.has(calledName)) {
+          if (!isBuiltInOrNoise(calledName)) {
             const callNode = captureMap['call'];
             const sourceId = findEnclosingFunctionId(callNode, file.path)
               || generateId('File', file.path);
-            result.calls.push({ filePath: file.path, calledName, sourceId });
+            const callForm = inferCallForm(callNode, callNameNode);
+            const receiverName = callForm === 'member' ? extractReceiverName(callNameNode) : undefined;
+            const receiverTypeName = receiverName ? lookupTypeEnv(typeEnv, receiverName, callNode) : undefined;
+            result.calls.push({
+              filePath: file.path,
+              calledName,
+              sourceId,
+              argCount: countCallArguments(callNode),
+              ...(callForm !== undefined ? { callForm } : {}),
+              ...(receiverName !== undefined ? { receiverName } : {}),
+              ...(receiverTypeName !== undefined ? { receiverTypeName } : {}),
+            });
           }
         }
         continue;
@@ -1302,12 +989,21 @@ const processFileGroup = (
       // Extract heritage (extends/implements)
       if (captureMap['heritage.class']) {
         if (captureMap['heritage.extends']) {
-          result.heritage.push({
-            filePath: file.path,
-            className: captureMap['heritage.class'].text,
-            parentName: captureMap['heritage.extends'].text,
-            kind: 'extends',
-          });
+          // Go struct embedding: the query matches ALL field_declarations with
+          // type_identifier, but only anonymous fields (no name) are embedded.
+          // Named fields like `Breed string` also match — skip them.
+          const extendsNode = captureMap['heritage.extends'];
+          const fieldDecl = extendsNode.parent;
+          const isNamedField = fieldDecl?.type === 'field_declaration'
+            && fieldDecl.childForFieldName('name');
+          if (!isNamedField) {
+            result.heritage.push({
+              filePath: file.path,
+              className: captureMap['heritage.class'].text,
+              parentName: captureMap['heritage.extends'].text,
+              kind: 'extends',
+            });
+          }
         }
         if (captureMap['heritage.implements']) {
           result.heritage.push({
@@ -1339,7 +1035,7 @@ const processFileGroup = (
       const nodeName = nameNode ? nameNode.text : 'init';
       const definitionNode = getDefinitionNodeFromCaptures(captureMap);
       const startLine = definitionNode ? definitionNode.startPosition.row : (nameNode ? nameNode.startPosition.row : 0);
-      const nodeId = generateId(nodeLabel, `${file.path}:${nodeName}:${startLine}`);
+      const nodeId = generateId(nodeLabel, `${file.path}:${nodeName}`);
 
       let description: string | undefined;
       if (language === SupportedLanguages.PHP) {
@@ -1353,6 +1049,14 @@ const processFileGroup = (
       const frameworkHint = definitionNode
         ? detectFrameworkFromAST(language, (definitionNode.text || '').slice(0, 300))
         : null;
+
+      let parameterCount: number | undefined;
+      let returnType: string | undefined;
+      if (nodeLabel === 'Function' || nodeLabel === 'Method' || nodeLabel === 'Constructor') {
+        const sig = extractMethodSignature(definitionNode);
+        parameterCount = sig.parameterCount;
+        returnType = sig.returnType;
+      }
 
       result.nodes.push({
         id: nodeId,
@@ -1369,14 +1073,23 @@ const processFileGroup = (
             astFrameworkReason: frameworkHint.reason,
           } : {}),
           ...(description !== undefined ? { description } : {}),
+          ...(parameterCount !== undefined ? { parameterCount } : {}),
+          ...(returnType !== undefined ? { returnType } : {}),
         },
       });
+
+      // Compute enclosing class for Method/Constructor/Property/Function — used for both ownerId and HAS_METHOD
+      // Function is included because Kotlin/Rust/Python capture class methods as Function nodes
+      const needsOwner = nodeLabel === 'Method' || nodeLabel === 'Constructor' || nodeLabel === 'Property' || nodeLabel === 'Function';
+      const enclosingClassId = needsOwner ? findEnclosingClassId(nameNode || definitionNode, file.path) : null;
 
       result.symbols.push({
         filePath: file.path,
         name: nodeName,
         nodeId,
         type: nodeLabel,
+        ...(parameterCount !== undefined ? { parameterCount } : {}),
+        ...(enclosingClassId ? { ownerId: enclosingClassId } : {}),
       });
 
       const fileId = generateId('File', file.path);
@@ -1389,6 +1102,18 @@ const processFileGroup = (
         confidence: 1.0,
         reason: '',
       });
+
+      // ── HAS_METHOD: link method/constructor/property to enclosing class ──
+      if (enclosingClassId) {
+        result.relationships.push({
+          id: generateId('HAS_METHOD', `${enclosingClassId}->${nodeId}`),
+          sourceId: enclosingClassId,
+          targetId: nodeId,
+          type: 'HAS_METHOD',
+          confidence: 1.0,
+          reason: '',
+        });
+      }
     }
 
     // Extract Laravel routes from route files via procedural AST walk

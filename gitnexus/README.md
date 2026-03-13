@@ -139,7 +139,8 @@ Your AI agent gets these tools automatically:
 gitnexus setup                    # Configure MCP for your editors (one-time)
 gitnexus analyze [path]           # Index a repository (or update stale index)
 gitnexus analyze --force          # Force full re-index
-gitnexus analyze --skip-embeddings  # Skip embedding generation (faster)
+gitnexus analyze --embeddings     # Enable embedding generation (slower, better search)
+gitnexus analyze --verbose        # Log skipped files when parsers are unavailable
 gitnexus mcp                     # Start MCP server (stdio) — serves all indexed repos
 gitnexus serve                   # Start local HTTP server (multi-repo) for web UI
 gitnexus list                    # List all indexed repositories
@@ -156,7 +157,27 @@ GitNexus supports indexing multiple repositories. Each `gitnexus analyze` regist
 
 ## Supported Languages
 
-TypeScript, JavaScript, Python, Java, C, C++, C#, Go, Rust, PHP, Swift, Ruby
+TypeScript, JavaScript, Python, Java, C, C++, C#, Go, Rust, PHP, Kotlin, Swift, Ruby
+
+### Language Feature Matrix
+
+| Language | Imports | Types | Exports | Named Bindings | Config | Frameworks | Entry Points | Heritage |
+|----------|---------|-------|---------|----------------|--------|------------|-------------|----------|
+| TypeScript | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| JavaScript | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Python | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| C# | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Java | ✓ | ✓ | ✓ | ✓ | — | ✓ | ✓ | ✓ |
+| Kotlin | ✓ | ✓ | ✓ | ✓ | — | ✓ | ✓ | ✓ |
+| Go | ✓ | ✓ | ✓ | — | ✓ | ✓ | ✓ | ✓ |
+| Rust | ✓ | ✓ | ✓ | ✓ | — | ✓ | ✓ | ✓ |
+| PHP | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | — |
+| Swift | — | ✓ | ✓ | — | ✓ | ✓ | ✓ | ✓ |
+| Ruby | ✓ | ✓ | ✓ | — | — | ✓ | ✓ | ✓ |
+| C | — | ✓ | ✓ | — | — | ✓ | ✓ | ✓ |
+| C++ | — | ✓ | ✓ | — | — | ✓ | ✓ | ✓ |
+
+**Imports** — cross-file import resolution · **Types** — type annotation extraction · **Exports** — public/exported symbol detection · **Named Bindings** — `import { X }` tracking · **Config** — language toolchain config parsing (tsconfig, go.mod, etc.) · **Frameworks** — AST-based framework pattern detection · **Entry Points** — entry point scoring heuristics · **Heritage** — class inheritance / interface implementation
 
 ## Agent Skills
 

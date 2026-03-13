@@ -328,6 +328,9 @@ const getCopyQuery = (table: NodeTableName, filePath: string): string => {
   if (table === 'Process') {
     return `COPY ${t}(id, label, heuristicLabel, processType, stepCount, communities, entryPointId, terminalId) FROM "${filePath}" ${COPY_CSV_OPTS}`;
   }
+  if (table === 'Method') {
+    return `COPY ${t}(id, name, filePath, startLine, endLine, isExported, content, description, parameterCount, returnType) FROM "${filePath}" ${COPY_CSV_OPTS}`;
+  }
   // TypeScript/JS code element tables have isExported; multi-language tables do not
   if (TABLES_WITH_EXPORTED.has(table)) {
     return `COPY ${t}(id, name, filePath, startLine, endLine, isExported, content, description) FROM "${filePath}" ${COPY_CSV_OPTS}`;
@@ -591,6 +594,7 @@ export const closeKuzu = async (): Promise<void> => {
 
 export const isKuzuReady = (): boolean => conn !== null && db !== null;
 
+
 /**
  * Delete all nodes (and their relationships) for a specific file from KuzuDB
  * @param filePath - The file path to delete nodes for
@@ -746,8 +750,8 @@ export const queryFTS = async (
     throw new Error('KuzuDB not initialized. Call initKuzu first.');
   }
   
-  // Escape single quotes in query
-  const escapedQuery = query.replace(/'/g, "''");
+  // Escape backslashes and single quotes to prevent Cypher injection
+  const escapedQuery = query.replace(/\\/g, '\\\\').replace(/'/g, "''");
   
   const cypher = `
     CALL QUERY_FTS_INDEX('${tableName}', '${indexName}', '${escapedQuery}', conjunctive := ${conjunctive})

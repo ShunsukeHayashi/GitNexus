@@ -48,6 +48,9 @@ coverage/
 # Claude Code worktrees
 .claude/worktrees/
 
+# Claude code skills
+.claude/skills/generated/
+
 # Assets (screenshots, images)
 assets/
 
@@ -56,3 +59,7 @@ repomix-output*
 
 # Design docs (local only)
 docs/plans/
+
+gitnexus/test/fixtures/mini-repo/*.md
+gitnexus/test/fixtures/mini-repo/.claude
+gitnexus/test/fixtures/mini-repo/.gitignore

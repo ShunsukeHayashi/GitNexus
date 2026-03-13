@@ -82,12 +82,12 @@ To configure MCP for your editor, run `npx gitnexus setup` once — or set it up
 
 | Editor                | MCP | Skills | Hooks (auto-augment) | Support        |
 | --------------------- | --- | ------ | -------------------- | -------------- |
-| **Claude Code** | Yes | Yes    | Yes (PreToolUse)     | **Full** |
+| **Claude Code** | Yes | Yes    | Yes (PreToolUse + PostToolUse) | **Full** |
 | **Cursor**      | Yes | Yes    | —                   | MCP + Skills   |
 | **Windsurf**    | Yes | —     | —                   | MCP            |
 | **OpenCode**    | Yes | Yes    | —                   | MCP + Skills   |
 
-> **Claude Code** gets the deepest integration: MCP tools + agent skills + PreToolUse hooks that automatically enrich grep/glob/bash calls with knowledge graph context.
+> **Claude Code** gets the deepest integration: MCP tools + agent skills + PreToolUse hooks that enrich searches with graph context + PostToolUse hooks that auto-reindex after commits.
 
 ### Community Integrations
 
@@ -135,7 +135,10 @@ claude mcp add gitnexus -- npx -y gitnexus@latest mcp
 gitnexus setup                    # Configure MCP for your editors (one-time)
 gitnexus analyze [path]           # Index a repository (or update stale index)
 gitnexus analyze --force          # Force full re-index
+gitnexus analyze --skills         # Generate repo-specific skill files from detected communities
 gitnexus analyze --skip-embeddings  # Skip embedding generation (faster)
+gitnexus analyze --embeddings     # Enable embedding generation (slower, better search)
+gitnexus analyze --verbose        # Log skipped files when parsers are unavailable
 gitnexus mcp                     # Start MCP server (stdio) — serves all indexed repos
 gitnexus serve                   # Start local HTTP server (multi-repo) for web UI connection
 gitnexus list                    # List all indexed repositories
@@ -188,6 +191,10 @@ gitnexus wiki --base-url <url>   # Wiki with custom LLM API base URL
 - **Debugging** — Trace bugs through call chains
 - **Impact Analysis** — Analyze blast radius before changes
 - **Refactoring** — Plan safe refactors using dependency mapping
+
+**Repo-specific skills** generated with `--skills`:
+
+When you run `gitnexus analyze --skills`, GitNexus detects the functional areas of your codebase (via Leiden community detection) and generates a `SKILL.md` file for each one under `.claude/skills/generated/`. Each skill describes a module's key files, entry points, execution flows, and cross-area connections — so your AI agent gets targeted context for the exact area of code you're working in. Skills are regenerated on each `--skills` run to stay current with the codebase.
 
 ---
 
