@@ -414,7 +414,21 @@ export const buildTypeEnv = (
       // (User[], []User, List[User]) that fail extractSimpleTypeName still get
       // their AST type node recorded for Strategy 1 for-loop resolution.
       // Try direct extraction first (works for Go var_spec, Python assignment, Rust let_declaration).
-      const typeNode = node.childForFieldName('type');
+      // Try direct type field first, then unwrap wrapper nodes (C# field_declaration,
+      // local_declaration_statement wrap their type inside a variable_declaration child).
+      let typeNode = node.childForFieldName('type');
+      if (!typeNode) {
+        // C# field_declaration / local_declaration_statement wrap type inside variable_declaration.
+        // Use manual loop instead of namedChildren.find() to avoid array allocation on hot path.
+        let wrapped = node.childForFieldName('declaration');
+        if (!wrapped) {
+          for (let i = 0; i < node.namedChildCount; i++) {
+            const c = node.namedChild(i);
+            if (c?.type === 'variable_declaration') { wrapped = c; break; }
+          }
+        }
+        if (wrapped) typeNode = wrapped.childForFieldName('type');
+      }
       if (typeNode) {
         const nameNode = node.childForFieldName('name')
           ?? node.childForFieldName('left')

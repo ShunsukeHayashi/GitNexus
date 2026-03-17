@@ -334,6 +334,11 @@ const extractForLoopBinding: ForLoopExtractor = (
       const field = fieldExpr.lastNamedChild;
       if (field?.type === 'field_identifier') methodName = field.text;
     }
+  } else if (rightNode.type === 'pointer_expression') {
+    // Dereference: for (auto& user : *ptr) → pointer_expression > identifier
+    // Only handles simple *identifier; *this->field and **ptr are not resolved.
+    const operand = rightNode.lastNamedChild;
+    if (operand?.type === 'identifier') iterableName = operand.text;
   }
   if (!iterableName) return;
 

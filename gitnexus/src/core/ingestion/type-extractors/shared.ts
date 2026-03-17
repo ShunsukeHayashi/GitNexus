@@ -207,9 +207,16 @@ export const extractSimpleTypeName = (typeNode: SyntaxNode, depth = 0): string |
     }
   }
 
+  // C++ template_type (e.g., vector<User>, map<string, User>): extract base name
+  if (typeNode.type === 'template_type') {
+    const base = typeNode.childForFieldName('name') ?? typeNode.firstNamedChild;
+    if (base) return extractSimpleTypeName(base, depth + 1);
+  }
+
   // Generic types: extract the base type (e.g., List<User> → List)
   // For nullable wrappers (Optional<User>, Option<User>), unwrap to inner type.
-  if (typeNode.type === 'generic_type' || typeNode.type === 'parameterized_type') {
+  if (typeNode.type === 'generic_type' || typeNode.type === 'parameterized_type'
+    || typeNode.type === 'generic_name') {
     const base = typeNode.childForFieldName('name')
       ?? typeNode.childForFieldName('type')
       ?? typeNode.firstNamedChild;
@@ -345,8 +352,9 @@ export const extractGenericTypeArgs = (typeNode: SyntaxNode, depth = 0): string[
     return [];
   }
 
-  // Only process generic/parameterized type nodes
-  if (typeNode.type !== 'generic_type' && typeNode.type !== 'parameterized_type') {
+  // Only process generic/parameterized type nodes (includes C#'s generic_name)
+  if (typeNode.type !== 'generic_type' && typeNode.type !== 'parameterized_type'
+    && typeNode.type !== 'generic_name') {
     return [];
   }
 

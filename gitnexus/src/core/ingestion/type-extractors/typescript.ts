@@ -81,8 +81,7 @@ const extractDeclaration: TypeBindingExtractor = (node: SyntaxNode, env: Map<str
     return;
   }
 
-  // Class field: `private users: User[]` — public_field_definition has name + type fields directly
-  // The name child is a property_identifier (not handled by extractVarName), so we read .text directly.
+  // Class field: `private users: User[]` — public_field_definition has name + type fields directly.
   if (node.type === 'public_field_definition') {
     const nameNode = node.childForFieldName('name');
     const typeAnnotation = node.childForFieldName('type');

@@ -160,9 +160,15 @@ const extractJavaForLoopBinding: ForLoopExtractor = (
     if (field) iterableName = field.text;
   } else if (iterableNode.type === 'method_invocation') {
     // data.keySet() → method_invocation > object: identifier + name: identifier
+    // Also handles this.data.values() → object is field_access, extract inner field name
     const obj = iterableNode.childForFieldName('object');
     const name = iterableNode.childForFieldName('name');
-    if (obj?.type === 'identifier') iterableName = obj.text;
+    if (obj?.type === 'identifier') {
+      iterableName = obj.text;
+    } else if (obj?.type === 'field_access') {
+      const innerField = obj.childForFieldName('field');
+      if (innerField) iterableName = innerField.text;
+    }
     if (name) methodName = name.text;
   }
   if (!iterableName) return;

@@ -768,3 +768,47 @@ describe('C++ structured binding in range-for', () => {
     expect(wrongSave).toBeUndefined();
   });
 });
+
+// ---------------------------------------------------------------------------
+// C++ pointer dereference in range-for: for (auto& user : *ptr)
+// ---------------------------------------------------------------------------
+
+describe('C++ pointer dereference in range-for', () => {
+  let result: PipelineResult;
+
+  beforeAll(async () => {
+    result = await runPipelineFromRepo(
+      path.join(FIXTURES, 'cpp-deref-range-for'),
+      () => {},
+    );
+  }, 60000);
+
+  it('detects User and Repo classes with save methods', () => {
+    expect(getNodesByLabel(result, 'Class')).toContain('User');
+    expect(getNodesByLabel(result, 'Class')).toContain('Repo');
+  });
+
+  it('resolves user.save() in *usersPtr range-for to User#save', () => {
+    const calls = getRelationships(result, 'CALLS');
+    const userSave = calls.find(c =>
+      c.target === 'save' && c.source === 'processUsers' && c.targetFilePath?.includes('User'),
+    );
+    expect(userSave).toBeDefined();
+  });
+
+  it('resolves repo.save() in *reposPtr range-for to Repo#save', () => {
+    const calls = getRelationships(result, 'CALLS');
+    const repoSave = calls.find(c =>
+      c.target === 'save' && c.source === 'processRepos' && c.targetFilePath?.includes('Repo'),
+    );
+    expect(repoSave).toBeDefined();
+  });
+
+  it('does NOT cross-resolve user.save() to Repo#save (negative)', () => {
+    const calls = getRelationships(result, 'CALLS');
+    const wrongSave = calls.find(c =>
+      c.target === 'save' && c.source === 'processUsers' && c.targetFilePath?.includes('Repo'),
+    );
+    expect(wrongSave).toBeUndefined();
+  });
+});

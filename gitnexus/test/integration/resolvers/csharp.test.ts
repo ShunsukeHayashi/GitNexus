@@ -1158,3 +1158,38 @@ describe('C# recursive_pattern type resolution', () => {
     expect(toRepo.length).toBe(1);
   });
 });
+
+// ---------------------------------------------------------------------------
+// C# nested member access with container property: this.data.Values
+// ---------------------------------------------------------------------------
+
+describe('C# nested member access foreach (this.data.Values)', () => {
+  let result: PipelineResult;
+
+  beforeAll(async () => {
+    result = await runPipelineFromRepo(
+      path.join(FIXTURES, 'csharp-nested-member-foreach'),
+      () => {},
+    );
+  }, 60000);
+
+  it('detects User class with Save method', () => {
+    expect(getNodesByLabel(result, 'Class')).toContain('User');
+  });
+
+  it('resolves user.Save() via this.data.Values to User#Save', () => {
+    const calls = getRelationships(result, 'CALLS');
+    const userSave = calls.find(c =>
+      c.target === 'Save' && c.source === 'ProcessValues' && c.targetFilePath?.includes('User'),
+    );
+    expect(userSave).toBeDefined();
+  });
+
+  it('does NOT resolve user.Save() to Repo#Save (negative)', () => {
+    const calls = getRelationships(result, 'CALLS');
+    const wrongSave = calls.find(c =>
+      c.target === 'Save' && c.source === 'ProcessValues' && c.targetFilePath?.includes('Repo'),
+    );
+    expect(wrongSave).toBeUndefined();
+  });
+});

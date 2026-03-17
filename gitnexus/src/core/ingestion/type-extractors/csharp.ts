@@ -224,7 +224,13 @@ const extractForLoopBinding: ForLoopExtractor = (
     const prop = rightNode.childForFieldName('name');
     const propText = prop?.type === 'identifier' ? prop.text : undefined;
     if (propText && KNOWN_CONTAINER_PROPS.has(propText)) {
-      if (obj?.type === 'identifier') iterableName = obj.text;
+      if (obj?.type === 'identifier') {
+        iterableName = obj.text;
+      } else if (obj?.type === 'member_access_expression') {
+        // Nested member access: this.data.Values → obj is "this.data", extract "data"
+        const innerProp = obj.childForFieldName('name');
+        if (innerProp) iterableName = innerProp.text;
+      }
       methodName = propText;
     } else if (propText) {
       // Bare member access: this.users → use property name for scopeEnv lookup

@@ -3458,6 +3458,25 @@ public class App {
       const { env } = buildTypeEnv(tree, 'csharp');
       expect(flatGet(env, 'user')).toBe('User');
     });
+
+    it('foreach (var user in this.data.Values) — nested member access with container property', () => {
+      const tree = parse(`
+using System.Collections.Generic;
+public class App {
+    private Dictionary<string, User> data;
+    public void ProcessValues() {
+        foreach (var user in this.data.Values) {
+            user.Save();
+        }
+    }
+}
+      `, CSharp);
+      const { env, lookup } = buildTypeEnv(tree, 'csharp');
+      expect(flatGet(env, 'user')).toBe('User');
+      // Verify lookup works from the call site (user.Save())
+      const saveCall = tree.rootNode.descendantsOfType('invocation_expression')[0];
+      expect(lookup('user', saveCall)).toBe('User');
+    });
   });
 
   describe('TypeScript class field declaration (Phase 6.1)', () => {
