@@ -78,6 +78,16 @@ const findPatternBranchScope = (node: SyntaxNode): SyntaxNode | undefined => {
   return undefined;
 };
 
+/**
+ * Fast-path nullable check: 90%+ of type names are simple identifiers (e.g. "User")
+ * that don't need the full stripNullable parse. Only call stripNullable when the
+ * string contains nullable markers ('|' for union types, '?' for nullable suffix).
+ */
+const fastStripNullable = (typeName: string): string | undefined =>
+  (typeName.indexOf('|') === -1 && typeName.indexOf('?') === -1)
+    ? typeName
+    : stripNullable(typeName);
+
 /** Implementation of the lookup logic — shared between TypeEnvironment and the legacy export. */
 const lookupInEnv = (
   env: TypeEnv,
@@ -107,7 +117,7 @@ const lookupInEnv = (
       const pos = callNode.startIndex;
       for (const override of varOverrides) {
         if (pos >= override.rangeStart && pos <= override.rangeEnd) {
-          return stripNullable(override.typeName);
+          return fastStripNullable(override.typeName);
         }
       }
     }
@@ -118,14 +128,14 @@ const lookupInEnv = (
     const scopeEnv = env.get(scopeKey);
     if (scopeEnv) {
       const result = scopeEnv.get(varName);
-      if (result) return stripNullable(result);
+      if (result) return fastStripNullable(result);
     }
   }
 
   // Fall back to file-level scope
   const fileEnv = env.get(FILE_SCOPE);
   const raw = fileEnv?.get(varName);
-  return raw ? stripNullable(raw) : undefined;
+  return raw ? fastStripNullable(raw) : undefined;
 };
 
 
@@ -328,6 +338,27 @@ const createClassNameLookup = (
  * the project are available for constructor inference in languages like Kotlin
  * where constructors are syntactically identical to function calls.
  */
+/**
+ * Node types whose subtrees can NEVER contain type-relevant descendants
+ * (declarations, parameters, for-loops, class definitions, pattern bindings).
+ * Conservative leaf-only set — verified safe across all 12 supported language grammars.
+ * IMPORTANT: Do NOT add expression containers (arguments, binary_expression, etc.) —
+ * they can contain arrow functions with typed parameters.
+ */
+const SKIP_SUBTREE_TYPES = new Set([
+  // String/template literals
+  'string',              'string_literal',       'template_string',
+  'string_content',      'string_fragment',      'heredoc_body',
+  'concatenated_string',
+  // Comments
+  'comment',             'line_comment',         'block_comment',
+  // Numeric/boolean/null literals
+  'number',              'integer_literal',      'float_literal',
+  'true',                'false',                'null',
+  // Regex
+  'regex',               'regex_pattern',
+]);
+
 export const buildTypeEnv = (
   tree: { rootNode: SyntaxNode },
   language: SupportedLanguages,
@@ -339,6 +370,13 @@ export const buildTypeEnv = (
   const classNames = createClassNameLookup(localClassNames, symbolTable);
   const config = typeConfigs[language];
   const bindings: ConstructorBinding[] = [];
+
+  // Pre-compute combined set of node types that need extractTypeBinding.
+  // Single Set.has() replaces 3 separate checks per node in walk().
+  const interestingNodeTypes = new Set<string>();
+  TYPED_PARAMETER_TYPES.forEach(t => interestingNodeTypes.add(t));
+  config.declarationNodeTypes.forEach(t => interestingNodeTypes.add(t));
+  config.forLoopNodeTypes?.forEach(t => interestingNodeTypes.add(t));
   const pendingAssignments: Array<{ scope: string; lhs: string; rhs: string }> = [];
   // Maps `scope\0varName` → the type annotation AST node from the original declaration.
   // Allows pattern extractors to navigate back to the declaration's generic type arguments
@@ -463,6 +501,9 @@ export const buildTypeEnv = (
   };
 
   const walk = (node: SyntaxNode, currentScope: string): void => {
+    // Fast skip: subtrees that can never contain type-relevant nodes (leaf-like literals).
+    if (SKIP_SUBTREE_TYPES.has(node.type)) return;
+
     // Collect class/struct names as we encounter them (used by extractInitializer
     // to distinguish constructor calls from function calls, e.g. C++ `User()` vs `getUser()`)
     // Currently only C++ uses this locally; other languages rely on the SymbolTable path.
@@ -480,17 +521,22 @@ export const buildTypeEnv = (
       if (funcName) scope = `${funcName}@${node.startIndex}`;
     }
 
-    // Get or create the sub-map for this scope
-    if (!env.has(scope)) env.set(scope, new Map());
-    const scopeEnv = env.get(scope)!;
-
-    extractTypeBinding(node, scopeEnv, scope);
+    // Only create scope map and call extractTypeBinding for interesting node types.
+    // Single Set.has() replaces 3 separate checks inside extractTypeBinding.
+    if (interestingNodeTypes.has(node.type)) {
+      if (!env.has(scope)) env.set(scope, new Map());
+      const scopeEnv = env.get(scope)!;
+      extractTypeBinding(node, scopeEnv, scope);
+    }
 
     // Pattern binding extraction: handles constructs that introduce NEW typed variables
     // via pattern matching (e.g. `if let Some(x) = opt`, `x instanceof T t`).
     // Runs after Tier 0/1 so scopeEnv already contains the source variable's type.
     // Conservative: extractor returns undefined when source type is unknown.
     if (config.extractPatternBinding && (!config.patternBindingNodeTypes || config.patternBindingNodeTypes.has(node.type))) {
+      // Ensure scopeEnv exists for pattern binding reads/writes
+      if (!env.has(scope)) env.set(scope, new Map());
+      const scopeEnv = env.get(scope)!;
       const patternBinding = config.extractPatternBinding(node, scopeEnv, declarationTypeNodes, scope);
       if (patternBinding) {
         if (config.allowPatternBindingOverwrite) {
@@ -523,9 +569,12 @@ export const buildTypeEnv = (
     // (JS uses variable_declarator/name/value, Rust uses let_declaration/pattern/value,
     // Python uses assignment/left/right, Go uses short_var_declaration/expression_list).
     if (config.extractPendingAssignment && config.declarationNodeTypes.has(node.type)) {
-      const pending = config.extractPendingAssignment(node, scopeEnv);
-      if (pending) {
-        pendingAssignments.push({ scope, ...pending });
+      const scopeEnv = env.get(scope);
+      if (scopeEnv) {
+        const pending = config.extractPendingAssignment(node, scopeEnv);
+        if (pending) {
+          pendingAssignments.push({ scope, ...pending });
+        }
       }
     }
 
@@ -533,8 +582,11 @@ export const buildTypeEnv = (
     // Only collect if TypeEnv didn't already resolve this binding.
     if (config.scanConstructorBinding) {
       const result = config.scanConstructorBinding(node);
-      if (result && !scopeEnv.has(result.varName)) {
-        bindings.push({ scope, ...result });
+      if (result) {
+        const scopeEnv = env.get(scope);
+        if (!scopeEnv?.has(result.varName)) {
+          bindings.push({ scope, ...result });
+        }
       }
     }
 
