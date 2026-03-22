@@ -29,6 +29,33 @@ export const createGraphRAGTools = (
   fileContents: Map<string, string>
 ) => {
 
+  /** Retry a query with exponential backoff for transient DB errors */
+  const retryQuery = async <T>(
+    fn: () => Promise<T>,
+    label: string,
+    maxRetries: number = 3
+  ): Promise<T> => {
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        return await fn();
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        const isTransient = /busy|locked|timeout|EAGAIN/i.test(msg);
+        if (isTransient && attempt < maxRetries) {
+          const delay = Math.min(100 * Math.pow(2, attempt), 2000);
+          if (import.meta.env.DEV) {
+            console.warn(`[nexus-ai] ${label} retry ${attempt + 1}/${maxRetries} after ${delay}ms: ${msg}`);
+          }
+          await new Promise(r => setTimeout(r, delay));
+          continue;
+        }
+        throw error;
+      }
+    }
+    throw new Error(`${label}: max retries exceeded`);
+  };
+
+
   // ============================================================================
   // TOOL 1: SEARCH (Hybrid + 1-hop expansion)
   // ============================================================================
@@ -126,8 +153,10 @@ export const createGraphRAGTools = (
                 connections = `\n    Connections: ${[...outList, ...inList].join(', ')}`;
               }
             }
-          } catch {
-            // Skip connections if query fails
+          } catch (err) {
+            if (import.meta.env.DEV) {
+              console.warn('[nexus-ai] connection lookup failed:', err instanceof Error ? err.message : err);
+            }
           }
         }
         
@@ -148,8 +177,10 @@ export const createGraphRAGTools = (
               const labelValue = Array.isArray(row) ? row[0] : row.label;
               if (labelValue) clusterLabel = labelValue;
             }
-          } catch {
-            // Skip cluster lookup if query fails
+          } catch (err) {
+            if (import.meta.env.DEV) {
+              console.warn('[nexus-ai] cluster lookup failed:', err instanceof Error ? err.message : err);
+            }
           }
         }
         
@@ -174,8 +205,10 @@ export const createGraphRAGTools = (
                 processes.push({ id, label: labelValue, step, stepCount });
               }
             }
-          } catch {
-            // Skip process lookup if query fails
+          } catch (err) {
+            if (import.meta.env.DEV) {
+              console.warn('[nexus-ai] process lookup failed:', err instanceof Error ? err.message : err);
+            }
           }
         }
         
@@ -297,7 +330,7 @@ export const createGraphRAGTools = (
           finalCypher = cypher.replace(/\{\{\s*QUERY_VECTOR\s*\}\}/g, queryVecStr);
         }
         
-        const results = await executeQuery(finalCypher);
+        const results = await retryQuery(() => executeQuery(finalCypher), 'cypher');
         
         if (results.length === 0) {
           return 'Query returned no results.';
