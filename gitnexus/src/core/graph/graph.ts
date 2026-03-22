@@ -1,6 +1,8 @@
 import { GraphNode, GraphRelationship, KnowledgeGraph } from './types.js'
 
 export const createKnowledgeGraph = (): KnowledgeGraph => {
+  // [Feature T021] Trigger Autonomous PR Bot Demo
+  // This minor change modifies the core graph logic to trigger Blast Radius analysis
   const nodeMap = new Map<string, GraphNode>();
   const relationshipMap = new Map<string, GraphRelationship>();
 
