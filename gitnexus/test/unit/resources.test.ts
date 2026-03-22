@@ -9,6 +9,20 @@
  * - Resource handlers with mocked backend
  */
 import { describe, it, expect, vi } from 'vitest';
+import { buildGraphMetaSnapshot, serializeGraphMetaJsonl } from '../../src/core/federation/graph-meta.js';
+
+vi.mock('../../src/core/federation/graph-meta.js', () => ({
+  buildGraphMetaSnapshot: vi.fn().mockResolvedValue({
+    repo: {
+      name: 'test-repo',
+      namespace: 'test-repo',
+    },
+    nodes: [],
+    relationships: [],
+  }),
+  serializeGraphMetaJsonl: vi.fn().mockReturnValue('{"kind":"repo","repo":{"name":"test-repo","namespace":"test-repo"}}'),
+}));
+
 import {
   getResourceDefinitions,
   getResourceTemplates,
@@ -67,18 +81,19 @@ describe('getResourceDefinitions', () => {
 });
 
 describe('getResourceTemplates', () => {
-  it('returns 6 dynamic templates', () => {
+  it('returns 7 dynamic templates', () => {
     const templates = getResourceTemplates();
-    expect(templates).toHaveLength(6);
+    expect(templates).toHaveLength(7);
   });
 
-  it('includes context, clusters, processes, schema, cluster detail, process detail', () => {
+  it('includes context, clusters, processes, schema, graph meta, cluster detail, process detail', () => {
     const templates = getResourceTemplates();
     const uris = templates.map(t => t.uriTemplate);
     expect(uris).toContain('gitnexus://repo/{name}/context');
     expect(uris).toContain('gitnexus://repo/{name}/clusters');
     expect(uris).toContain('gitnexus://repo/{name}/processes');
     expect(uris).toContain('gitnexus://repo/{name}/schema');
+    expect(uris).toContain('gitnexus://repo/{name}/graph-meta');
     expect(uris).toContain('gitnexus://repo/{name}/cluster/{clusterName}');
     expect(uris).toContain('gitnexus://repo/{name}/process/{processName}');
   });
@@ -157,6 +172,30 @@ describe('readResource', () => {
     expect(result).toContain('GitNexus Graph Schema');
     expect(result).toContain('CALLS');
     expect(result).toContain('IMPORTS');
+  });
+
+  it('routes gitnexus://repo/{name}/graph-meta to JSONL export', async () => {
+    const backend = createMockBackend({
+      resolvedRepo: {
+        name: 'test-repo',
+        repoPath: '/tmp/test-repo',
+        storagePath: '/tmp/test-repo/.gitnexus',
+        indexedAt: '2026-03-23T00:00:00.000Z',
+        lastCommit: 'abc1234',
+        stats: { nodes: 10, edges: 15, processes: 2 },
+      },
+    });
+
+    const result = await readResource('gitnexus://repo/test-repo/graph-meta', backend);
+    expect(result).toContain('"kind":"repo"');
+    expect(buildGraphMetaSnapshot).toHaveBeenCalledWith(
+      '/tmp/test-repo/.gitnexus/lbug',
+      expect.objectContaining({
+        name: 'test-repo',
+        namespace: 'test-repo',
+      }),
+    );
+    expect(serializeGraphMetaJsonl).toHaveBeenCalled();
   });
 
   it('routes gitnexus://repo/{name}/clusters correctly', async () => {

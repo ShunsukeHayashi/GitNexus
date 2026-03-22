@@ -7,6 +7,8 @@
 
 import type { LocalBackend } from './local/local-backend.js';
 import { checkStaleness } from './staleness.js';
+import { buildGraphMetaSnapshot, serializeGraphMetaJsonl } from '../core/federation/graph-meta.js';
+import path from 'path';
 
 export interface ResourceDefinition {
   uri: string;
@@ -70,6 +72,12 @@ export function getResourceTemplates(): ResourceTemplate[] {
       name: 'Graph Schema',
       description: 'Node/edge schema for Cypher queries',
       mimeType: 'text/yaml',
+    },
+    {
+      uriTemplate: 'gitnexus://repo/{name}/graph-meta',
+      name: 'Graph Meta JSONL',
+      description: 'Portable graph metadata snapshot for cross-repo aggregation',
+      mimeType: 'application/x-ndjson',
     },
     {
       uriTemplate: 'gitnexus://repo/{name}/cluster/{clusterName}',
@@ -139,6 +147,8 @@ export async function readResource(uri: string, backend: LocalBackend): Promise<
       return getProcessesResource(backend, repoName);
     case 'schema':
       return getSchemaResource();
+    case 'graph-meta':
+      return getGraphMetaResource(backend, repoName);
     case 'cluster':
       return getClusterDetailResource(parsed.param!, backend, repoName);
     case 'process':
@@ -232,6 +242,7 @@ async function getContextResource(backend: LocalBackend, repoName?: string): Pro
   lines.push(`  - gitnexus://repo/${context.projectName}/processes: All execution flows`);
   lines.push(`  - gitnexus://repo/${context.projectName}/cluster/{name}: Module details`);
   lines.push(`  - gitnexus://repo/${context.projectName}/process/{name}: Process trace`);
+  lines.push(`  - gitnexus://repo/${context.projectName}/graph-meta: Portable JSONL graph snapshot`);
   
   return lines.join('\n');
 }
@@ -364,6 +375,23 @@ example_queries:
 `;
 }
 
+async function getGraphMetaResource(backend: LocalBackend, repoName?: string): Promise<string> {
+  const repo = await backend.resolveRepo(repoName);
+  const snapshot = await buildGraphMetaSnapshot(
+    path.join(repo.storagePath, 'lbug'),
+    {
+      name: repo.name,
+      namespace: repo.name,
+      repoPath: repo.repoPath,
+      indexedAt: repo.indexedAt,
+      lastCommit: repo.lastCommit,
+      stats: repo.stats,
+    },
+  );
+
+  return serializeGraphMetaJsonl(snapshot);
+}
+
 /**
  * Cluster detail resource — queries graph directly via backend.queryClusterDetail()
  */
@@ -478,6 +506,7 @@ async function getSetupResource(backend: LocalBackend): Promise<string> {
       `- \`gitnexus://repo/${repo.name}/clusters\` — All functional areas`,
       `- \`gitnexus://repo/${repo.name}/processes\` — All execution flows`,
       `- \`gitnexus://repo/${repo.name}/schema\` — Graph schema for Cypher`,
+      `- \`gitnexus://repo/${repo.name}/graph-meta\` — Portable JSONL graph snapshot`,
     ];
     sections.push(lines.join('\n'));
   }

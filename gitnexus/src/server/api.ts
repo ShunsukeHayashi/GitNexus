@@ -22,6 +22,7 @@ import { hybridSearch } from '../core/search/hybrid-search.js';
 // at server startup — crashes on unsupported Node ABI versions (#89)
 import { LocalBackend } from '../mcp/local/local-backend.js';
 import { mountMCPEndpoints } from './mcp-http.js';
+import { aggregateRemoteGraphMeta } from './mcp-router.js';
 
 /**
  * Determine whether an HTTP Origin header value is allowed by CORS policy.
@@ -398,6 +399,44 @@ export const createServer = async (port: number, host: string = '127.0.0.1') => 
       res.json(result);
     } catch (err: any) {
       res.status(statusFromError(err)).json({ error: err.message || 'Failed to query cluster detail' });
+    }
+  });
+
+  // Cross-repo aggregation via remote GitNexus MCP servers
+  app.post('/api/federation/graph-meta', async (req, res) => {
+    try {
+      const sources = Array.isArray(req.body?.sources) ? req.body.sources : null;
+      if (!sources || sources.length === 0) {
+        res.status(400).json({ error: 'Missing non-empty "sources" array in request body' });
+        return;
+      }
+
+      const parsedSources = sources.map((source, index) => {
+        if (!source || typeof source !== 'object') {
+          throw new Error(`sources[${index}] must be an object`);
+        }
+        if (typeof source.url !== 'string' || !source.url.trim()) {
+          throw new Error(`sources[${index}].url must be a non-empty string`);
+        }
+        if (typeof source.repo !== 'string' || !source.repo.trim()) {
+          throw new Error(`sources[${index}].repo must be a non-empty string`);
+        }
+
+        return {
+          url: source.url.trim(),
+          repo: source.repo.trim(),
+        };
+      });
+
+      const result = await aggregateRemoteGraphMeta(parsedSources);
+      res.json(result);
+    } catch (err: any) {
+      const message = err.message || 'Failed to aggregate remote graph metadata';
+      const isValidationError =
+        message.includes('Missing non-empty "sources" array')
+        || message.includes('must be')
+        || message.includes('missing repo');
+      res.status(isValidationError ? 400 : 502).json({ error: message });
     }
   });
 
