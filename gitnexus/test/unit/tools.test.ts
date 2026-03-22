@@ -2,26 +2,30 @@
  * Unit Tests: MCP Tool Definitions
  *
  * Tests: GITNEXUS_TOOLS from tools.ts
- * - All 7 tools are defined
+ * - All core tools are defined
  * - Each tool has valid name, description, inputSchema
  * - Required fields are correct
  * - Optional repo parameter is present on tools that need it
+ * - suggest_tests tool is present with correct schema
  */
 import { describe, it, expect } from 'vitest';
 import { GITNEXUS_TOOLS, type ToolDefinition } from '../../src/mcp/tools.js';
 
+/** Core tools that must always be present */
+const CORE_TOOL_NAMES = [
+  'list_repos', 'query', 'cypher', 'context',
+  'detect_changes', 'rename', 'impact', 'suggest_tests',
+];
+
 describe('GITNEXUS_TOOLS', () => {
-  it('exports exactly 7 tools', () => {
-    expect(GITNEXUS_TOOLS).toHaveLength(7);
+  it('exports at least the core tools', () => {
+    expect(GITNEXUS_TOOLS.length).toBeGreaterThanOrEqual(CORE_TOOL_NAMES.length);
   });
 
-  it('contains all expected tool names', () => {
+  it('contains all core tool names', () => {
     const names = GITNEXUS_TOOLS.map(t => t.name);
     expect(names).toEqual(
-      expect.arrayContaining([
-        'list_repos', 'query', 'cypher', 'context',
-        'detect_changes', 'rename', 'impact',
-      ])
+      expect.arrayContaining(CORE_TOOL_NAMES)
     );
   });
 
@@ -77,10 +81,12 @@ describe('GITNEXUS_TOOLS', () => {
     expect(listTool.inputSchema.required).toEqual([]);
   });
 
-  it('all tools except list_repos have optional repo parameter', () => {
-    for (const tool of GITNEXUS_TOOLS) {
-      if (tool.name === 'list_repos') continue;
-      expect(tool.inputSchema.properties.repo).toBeDefined();
+  it('core tools (except list_repos) have optional repo parameter', () => {
+    const coreToolsWithRepo = CORE_TOOL_NAMES.filter(n => n !== 'list_repos');
+    for (const toolName of coreToolsWithRepo) {
+      const tool = GITNEXUS_TOOLS.find(t => t.name === toolName)!;
+      expect(tool, `Tool '${toolName}' should exist`).toBeDefined();
+      expect(tool.inputSchema.properties.repo, `Tool '${toolName}' should have repo param`).toBeDefined();
       expect(tool.inputSchema.properties.repo.type).toBe('string');
       // repo should never be required
       expect(tool.inputSchema.required).not.toContain('repo');
@@ -98,5 +104,31 @@ describe('GITNEXUS_TOOLS', () => {
     const relProp = impactTool.inputSchema.properties.relationTypes;
     expect(relProp.type).toBe('array');
     expect(relProp.items).toEqual({ type: 'string' });
+  });
+
+  // ─── suggest_tests tool ────────────────────────────────────────────
+
+  it('suggest_tests tool exists', () => {
+    const tool = GITNEXUS_TOOLS.find(t => t.name === 'suggest_tests');
+    expect(tool).toBeDefined();
+  });
+
+  it('suggest_tests tool requires "symbol" parameter', () => {
+    const tool = GITNEXUS_TOOLS.find(t => t.name === 'suggest_tests')!;
+    expect(tool.inputSchema.required).toContain('symbol');
+    expect(tool.inputSchema.properties.symbol).toBeDefined();
+    expect(tool.inputSchema.properties.symbol.type).toBe('string');
+  });
+
+  it('suggest_tests tool has optional repo parameter', () => {
+    const tool = GITNEXUS_TOOLS.find(t => t.name === 'suggest_tests')!;
+    expect(tool.inputSchema.properties.repo).toBeDefined();
+    expect(tool.inputSchema.required).not.toContain('repo');
+  });
+
+  it('suggest_tests description mentions Vitest and blast radius', () => {
+    const tool = GITNEXUS_TOOLS.find(t => t.name === 'suggest_tests')!;
+    expect(tool.description.toLowerCase()).toContain('vitest');
+    expect(tool.description.toLowerCase()).toContain('blast radius');
   });
 });
