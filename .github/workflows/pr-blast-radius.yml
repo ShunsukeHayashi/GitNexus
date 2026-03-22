@@ -36,7 +36,7 @@ jobs:
       # --skip-ai-context skips CLAUDE.md/AGENTS.md generation (not needed in CI).
       # --force ensures a clean index even if a stale one exists from cache.
       - name: Analyze gitnexus source
-        run: node gitnexus/dist/cli/index.js analyze ./gitnexus --force --skip-ai-context
+        run: node gitnexus/dist/cli/index.js analyze ./gitnexus --force --skip-ai-context --skip-git
         timeout-minutes: 12
 
       # Run the blast radius script and write /tmp/blast-radius-body.md
