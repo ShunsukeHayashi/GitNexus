@@ -1,24 +1,24 @@
 import { NodeLabel } from '../core/graph/types';
 
-// Node colors by type - slightly muted for less visual noise
+// Node colors by type - vivid/bright palette for dark canvas background
 export const NODE_COLORS: Record<NodeLabel, string> = {
-  Project: '#a855f7',    // Purple - prominent
-  Package: '#8b5cf6',    // Violet
-  Module: '#7c3aed',     // Violet darker
-  Folder: '#6366f1',     // Indigo
-  File: '#3b82f6',       // Blue
-  Class: '#f59e0b',      // Amber - stands out
-  Function: '#10b981',   // Emerald
-  Method: '#14b8a6',     // Teal
-  Variable: '#64748b',   // Slate - muted (less important)
-  Interface: '#ec4899',  // Pink
-  Enum: '#f97316',       // Orange
-  Decorator: '#eab308',  // Yellow
-  Import: '#475569',     // Slate darker - very muted
-  Type: '#a78bfa',       // Violet light
-  CodeElement: '#64748b', // Slate - muted
-  Community: '#818cf8',  // Indigo light - cluster indicator
-  Process: '#f43f5e',    // Rose - execution flow indicator
+  Project: '#e879f9',    // Bright fuchsia - largest, most prominent
+  Package: '#c084fc',    // Bright violet
+  Module: '#a78bfa',     // Bright purple
+  Folder: '#818cf8',     // Bright indigo
+  File: '#60a5fa',       // Bright sky blue
+  Class: '#fbbf24',      // Bright amber - warm contrast
+  Function: '#34d399',   // Bright emerald
+  Method: '#2dd4bf',     // Bright teal
+  Variable: '#94a3b8',   // Medium slate - visible but secondary
+  Interface: '#f472b6',  // Bright pink
+  Enum: '#fb923c',       // Bright orange
+  Decorator: '#facc15',  // Bright yellow
+  Import: '#64748b',     // Slate - clearly secondary
+  Type: '#c084fc',       // Bright violet light
+  CodeElement: '#94a3b8', // Medium slate
+  Community: '#38bdf8',  // Bright sky - cluster indicator
+  Process: '#fb7185',    // Bright rose - execution flow
 };
 
 // Node sizes by type - clear visual hierarchy with dramatic size differences

@@ -244,7 +244,7 @@ export const CodeReferencesPanel = ({ onFocusNode }: CodeReferencesPanelProps) =
   return (
     <aside
       ref={(el) => { panelRef.current = el; }}
-      className="h-full bg-surface/95 backdrop-blur-md border-r border-border-subtle flex flex-col animate-slide-in relative shadow-2xl"
+      className="h-full bg-white border-r border-border-subtle flex flex-col animate-slide-in relative shadow-2xl"
       style={{ width: panelWidth }}
     >
       {/* Resize handle */}
@@ -254,7 +254,7 @@ export const CodeReferencesPanel = ({ onFocusNode }: CodeReferencesPanelProps) =
         title="Drag to resize"
       />
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2.5 border-b border-border-subtle bg-gradient-to-r from-elevated/60 to-surface/60">
+      <div className="flex items-center justify-between px-3 py-2.5 border-b border-border-subtle bg-gray-50">
         <div className="flex items-center gap-2">
           <Code className="w-4 h-4 text-cyan-400" />
           <span className="text-sm font-semibold text-text-primary">Code Inspector</span>
@@ -283,8 +283,8 @@ export const CodeReferencesPanel = ({ onFocusNode }: CodeReferencesPanelProps) =
         {/* Top: Selected file viewer (when a node is selected) */}
         {showSelectedViewer && (
           <div className={`${showCitations ? 'h-[42%]' : 'flex-1'} min-h-0 flex flex-col`}>
-            <div className="px-3 py-2 bg-gradient-to-r from-amber-500/8 to-orange-500/5 border-b border-amber-500/20 flex items-center gap-2">
-              <div className="flex items-center gap-1.5 px-2 py-0.5 bg-amber-500/15 rounded-md border border-amber-500/25">
+            <div className="px-3 py-2 bg-gray-100 border-b border-gray-200 flex items-center gap-2">
+              <div className="flex items-center gap-1.5 px-2 py-0.5 bg-gray-200 rounded-md border border-gray-300">
                 <MousePointerClick className="w-3 h-3 text-amber-400" />
                 <span className="text-[10px] text-amber-300 font-semibold uppercase tracking-wide">Selected</span>
               </div>
@@ -357,8 +357,8 @@ export const CodeReferencesPanel = ({ onFocusNode }: CodeReferencesPanelProps) =
         {showCitations && (
           <div className="flex-1 min-h-0 flex flex-col">
             {/* AI Citations Section Header */}
-            <div className="px-3 py-2 bg-gradient-to-r from-cyan-500/8 to-teal-500/5 border-b border-cyan-500/20 flex items-center gap-2">
-              <div className="flex items-center gap-1.5 px-2 py-0.5 bg-cyan-500/15 rounded-md border border-cyan-500/25">
+            <div className="px-3 py-2 bg-gray-100 border-b border-gray-200 flex items-center gap-2">
+              <div className="flex items-center gap-1.5 px-2 py-0.5 bg-gray-200 rounded-md border border-gray-300">
                 <Sparkles className="w-3 h-3 text-cyan-400" />
                 <span className="text-[10px] text-cyan-300 font-semibold uppercase tracking-wide">AI Citations</span>
               </div>

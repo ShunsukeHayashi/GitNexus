@@ -182,24 +182,24 @@ export const DropZone = ({ onFileSelect, onGitClone, onServerConnect }: DropZone
     : null;
 
   return (
-    <div className="flex items-center justify-center min-h-screen p-8 bg-void">
+    <div className="flex items-center justify-center min-h-screen p-8 bg-gray-50">
       {/* Background gradient effects */}
       <div className="fixed inset-0 pointer-events-none">
-        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-accent/10 rounded-full blur-3xl" />
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-black/10 rounded-full blur-3xl" />
         <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-node-interface/10 rounded-full blur-3xl" />
       </div>
 
       <div className="relative w-full max-w-lg">
         {/* Tab Switcher */}
-        <div className="flex mb-4 bg-surface border border-border-default rounded-xl p-1">
+        <div className="flex mb-4 bg-gray-50 border border-gray-200 rounded-xl p-1">
           <button
             onClick={() => { setActiveTab('zip'); setError(null); }}
             className={`
               flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg
               text-sm font-medium transition-all duration-200
               ${activeTab === 'zip'
-                ? 'bg-accent text-white shadow-md'
-                : 'text-text-secondary hover:text-text-primary hover:bg-elevated'
+                ? 'bg-black text-white shadow-md'
+                : 'text-gray-500 hover:text-gray-900 hover:bg-white'
               }
             `}
           >
@@ -212,8 +212,8 @@ export const DropZone = ({ onFileSelect, onGitClone, onServerConnect }: DropZone
               flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg
               text-sm font-medium transition-all duration-200
               ${activeTab === 'github'
-                ? 'bg-accent text-white shadow-md'
-                : 'text-text-secondary hover:text-text-primary hover:bg-elevated'
+                ? 'bg-black text-white shadow-md'
+                : 'text-gray-500 hover:text-gray-900 hover:bg-white'
               }
             `}
           >
@@ -226,8 +226,8 @@ export const DropZone = ({ onFileSelect, onGitClone, onServerConnect }: DropZone
               flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg
               text-sm font-medium transition-all duration-200
               ${activeTab === 'server'
-                ? 'bg-accent text-white shadow-md'
-                : 'text-text-secondary hover:text-text-primary hover:bg-elevated'
+                ? 'bg-black text-white shadow-md'
+                : 'text-gray-500 hover:text-gray-900 hover:bg-white'
               }
             `}
           >
@@ -249,11 +249,11 @@ export const DropZone = ({ onFileSelect, onGitClone, onServerConnect }: DropZone
             <div
               className={`
                 relative p-16
-                bg-surface border-2 border-dashed rounded-3xl
+                bg-gray-50 border-2 border-dashed rounded-3xl
                 transition-all duration-300 cursor-pointer
                 ${isDragging
-                  ? 'border-accent bg-elevated scale-105 shadow-glow'
-                  : 'border-border-default hover:border-accent/50 hover:bg-elevated/50 animate-breathe'
+                  ? 'border-accent bg-white scale-105 shadow-lg'
+                  : 'border-gray-200 hover:border-accent/50 hover:bg-white/50 animate-breathe'
                 }
               `}
               onDragOver={handleDragOver}
@@ -273,8 +273,8 @@ export const DropZone = ({ onFileSelect, onGitClone, onServerConnect }: DropZone
               <div className={`
                 mx-auto w-20 h-20 mb-6
                 flex items-center justify-center
-                bg-gradient-to-br from-accent to-node-interface
-                rounded-2xl shadow-glow
+                bg-black
+                rounded-2xl shadow-lg
                 transition-transform duration-300
                 ${isDragging ? 'scale-110' : ''}
               `}>
@@ -286,16 +286,16 @@ export const DropZone = ({ onFileSelect, onGitClone, onServerConnect }: DropZone
               </div>
 
               {/* Text */}
-              <h2 className="text-xl font-semibold text-text-primary text-center mb-2">
+              <h2 className="text-xl font-semibold text-gray-900 text-center mb-2">
                 {isDragging ? 'Drop it here!' : 'Drop your codebase'}
               </h2>
-              <p className="text-sm text-text-secondary text-center mb-6">
+              <p className="text-sm text-gray-500 text-center mb-6">
                 Drag & drop a .zip file to generate a knowledge graph
               </p>
 
               {/* Hints */}
-              <div className="flex items-center justify-center gap-3 text-xs text-text-muted">
-                <span className="px-3 py-1.5 bg-elevated border border-border-subtle rounded-md">
+              <div className="flex items-center justify-center gap-3 text-xs text-gray-400">
+                <span className="px-3 py-1.5 bg-white border border-border-subtle rounded-md">
                   .zip
                 </span>
               </div>
@@ -306,17 +306,17 @@ export const DropZone = ({ onFileSelect, onGitClone, onServerConnect }: DropZone
 
         {/* GitHub URL Tab */}
         {activeTab === 'github' && (
-          <div className="p-8 bg-surface border border-border-default rounded-3xl">
+          <div className="p-8 bg-gray-50 border border-gray-200 rounded-3xl">
             {/* Icon */}
             <div className="mx-auto w-20 h-20 mb-6 flex items-center justify-center bg-gradient-to-br from-[#333] to-[#24292e] rounded-2xl shadow-lg">
               <Github className="w-10 h-10 text-white" />
             </div>
 
             {/* Text */}
-            <h2 className="text-xl font-semibold text-text-primary text-center mb-2">
+            <h2 className="text-xl font-semibold text-gray-900 text-center mb-2">
               Clone from GitHub
             </h2>
-            <p className="text-sm text-text-secondary text-center mb-6">
+            <p className="text-sm text-gray-500 text-center mb-6">
               Enter a repository URL to clone directly
             </p>
 
@@ -336,8 +336,8 @@ export const DropZone = ({ onFileSelect, onGitClone, onServerConnect }: DropZone
                 data-form-type="other"
                 className="
                   w-full px-4 py-3
-                  bg-elevated border border-border-default rounded-xl
-                  text-text-primary placeholder-text-muted
+                  bg-white border border-gray-200 rounded-xl
+                  text-gray-900 placeholder-text-muted
                   focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent
                   disabled:opacity-50 disabled:cursor-not-allowed
                   transition-all duration-200
@@ -346,7 +346,7 @@ export const DropZone = ({ onFileSelect, onGitClone, onServerConnect }: DropZone
 
               {/* Token input for private repos */}
               <div className="relative">
-                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted">
+                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
                   <Key className="w-4 h-4" />
                 </div>
                 <input
@@ -362,8 +362,8 @@ export const DropZone = ({ onFileSelect, onGitClone, onServerConnect }: DropZone
                   data-form-type="other"
                   className="
                     w-full pl-10 pr-10 py-3
-                    bg-elevated border border-border-default rounded-xl
-                    text-text-primary placeholder-text-muted
+                    bg-white border border-gray-200 rounded-xl
+                    text-gray-900 placeholder-text-muted
                     focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent
                     disabled:opacity-50 disabled:cursor-not-allowed
                     transition-all duration-200
@@ -372,7 +372,7 @@ export const DropZone = ({ onFileSelect, onGitClone, onServerConnect }: DropZone
                 <button
                   type="button"
                   onClick={() => setShowToken(!showToken)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-secondary transition-colors"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-500 transition-colors"
                 >
                   {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
@@ -384,7 +384,7 @@ export const DropZone = ({ onFileSelect, onGitClone, onServerConnect }: DropZone
                 className="
                   w-full flex items-center justify-center gap-2
                   px-4 py-3
-                  bg-accent hover:bg-accent/90
+                  bg-black hover:bg-black/90
                   text-white font-medium rounded-xl
                   disabled:opacity-50 disabled:cursor-not-allowed
                   transition-all duration-200
@@ -412,9 +412,9 @@ export const DropZone = ({ onFileSelect, onGitClone, onServerConnect }: DropZone
             {/* Progress bar */}
             {isCloning && (
               <div className="mt-4">
-                <div className="h-2 bg-elevated rounded-full overflow-hidden">
+                <div className="h-2 bg-white rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-accent transition-all duration-300 ease-out"
+                    className="h-full bg-black transition-all duration-300 ease-out"
                     style={{ width: `${cloneProgress.percent}%` }}
                   />
                 </div>
@@ -423,17 +423,17 @@ export const DropZone = ({ onFileSelect, onGitClone, onServerConnect }: DropZone
 
             {/* Security note */}
             {githubToken && (
-              <p className="mt-3 text-xs text-text-muted text-center">
+              <p className="mt-3 text-xs text-gray-400 text-center">
                 Token stays in your browser only, never sent to any server
               </p>
             )}
 
             {/* Hints */}
-            <div className="mt-4 flex items-center justify-center gap-3 text-xs text-text-muted">
-              <span className="px-3 py-1.5 bg-elevated border border-border-subtle rounded-md">
+            <div className="mt-4 flex items-center justify-center gap-3 text-xs text-gray-400">
+              <span className="px-3 py-1.5 bg-white border border-border-subtle rounded-md">
                 {githubToken ? 'Private + Public' : 'Public repos'}
               </span>
-              <span className="px-3 py-1.5 bg-elevated border border-border-subtle rounded-md">
+              <span className="px-3 py-1.5 bg-white border border-border-subtle rounded-md">
                 Shallow clone
               </span>
             </div>
@@ -442,17 +442,17 @@ export const DropZone = ({ onFileSelect, onGitClone, onServerConnect }: DropZone
 
         {/* Server Tab */}
         {activeTab === 'server' && (
-          <div className="p-8 bg-surface border border-border-default rounded-3xl">
+          <div className="p-8 bg-gray-50 border border-gray-200 rounded-3xl">
             {/* Icon */}
-            <div className="mx-auto w-20 h-20 mb-6 flex items-center justify-center bg-gradient-to-br from-accent to-emerald-600 rounded-2xl shadow-lg">
+            <div className="mx-auto w-20 h-20 mb-6 flex items-center justify-center bg-black rounded-2xl shadow-lg">
               <Globe className="w-10 h-10 text-white" />
             </div>
 
             {/* Text */}
-            <h2 className="text-xl font-semibold text-text-primary text-center mb-2">
+            <h2 className="text-xl font-semibold text-gray-900 text-center mb-2">
               Connect to Server
             </h2>
-            <p className="text-sm text-text-secondary text-center mb-6">
+            <p className="text-sm text-gray-500 text-center mb-6">
               Load a pre-built knowledge graph from a running GitNexus server
             </p>
 
@@ -472,8 +472,8 @@ export const DropZone = ({ onFileSelect, onGitClone, onServerConnect }: DropZone
                 data-form-type="other"
                 className="
                   w-full px-4 py-3
-                  bg-elevated border border-border-default rounded-xl
-                  text-text-primary placeholder-text-muted
+                  bg-white border border-gray-200 rounded-xl
+                  text-gray-900 placeholder-text-muted
                   focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent
                   disabled:opacity-50 disabled:cursor-not-allowed
                   transition-all duration-200
@@ -487,7 +487,7 @@ export const DropZone = ({ onFileSelect, onGitClone, onServerConnect }: DropZone
                   className="
                     flex-1 flex items-center justify-center gap-2
                     px-4 py-3
-                    bg-accent hover:bg-accent/90
+                    bg-black hover:bg-black/90
                     text-white font-medium rounded-xl
                     disabled:opacity-50 disabled:cursor-not-allowed
                     transition-all duration-200
@@ -535,9 +535,9 @@ export const DropZone = ({ onFileSelect, onGitClone, onServerConnect }: DropZone
             {/* Progress bar */}
             {isConnecting && serverProgress.phase === 'downloading' && (
               <div className="mt-4">
-                <div className="h-2 bg-elevated rounded-full overflow-hidden">
+                <div className="h-2 bg-white rounded-full overflow-hidden">
                   <div
-                    className={`h-full bg-accent transition-all duration-300 ease-out ${
+                    className={`h-full bg-black transition-all duration-300 ease-out ${
                       serverProgressPercent === null ? 'animate-pulse' : ''
                     }`}
                     style={{
@@ -548,7 +548,7 @@ export const DropZone = ({ onFileSelect, onGitClone, onServerConnect }: DropZone
                   />
                 </div>
                 {serverProgress.total && (
-                  <p className="mt-1 text-xs text-text-muted text-center">
+                  <p className="mt-1 text-xs text-gray-400 text-center">
                     {formatBytes(serverProgress.downloaded)} / {formatBytes(serverProgress.total)}
                   </p>
                 )}
@@ -556,11 +556,11 @@ export const DropZone = ({ onFileSelect, onGitClone, onServerConnect }: DropZone
             )}
 
             {/* Hints */}
-            <div className="mt-4 flex items-center justify-center gap-3 text-xs text-text-muted">
-              <span className="px-3 py-1.5 bg-elevated border border-border-subtle rounded-md">
+            <div className="mt-4 flex items-center justify-center gap-3 text-xs text-gray-400">
+              <span className="px-3 py-1.5 bg-white border border-border-subtle rounded-md">
                 Pre-indexed
               </span>
-              <span className="px-3 py-1.5 bg-elevated border border-border-subtle rounded-md">
+              <span className="px-3 py-1.5 bg-white border border-border-subtle rounded-md">
                 No WASM needed
               </span>
             </div>
