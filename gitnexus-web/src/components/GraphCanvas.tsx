@@ -66,64 +66,87 @@ const HIGHLIGHT_COLOR = '#38bdf8';  // Sky    — manual query highlight
 const BLAST_COLOR     = '#ef4444';
 const SELECTED_COLOR  = '#f59e0b';
 
+// T004: module-level geometry/material caches — shared across all node renders
+// Geometries are keyed by "radius:wSeg:hSeg", materials by "colorHex:shininess:emissiveHex"
+// Each node still gets its own THREE.Group so it can be positioned independently.
+const _geoCache = new Map<string, THREE.SphereGeometry>();
+const _matCache = new Map<string, THREE.MeshPhongMaterial>();
+const _haloGeoCache = new Map<string, THREE.SphereGeometry>();
+const _haloMatCache = new Map<string, THREE.MeshBasicMaterial>();
+
+function _cachedSphereGeo(radius: number, w: number, h: number): THREE.SphereGeometry {
+  const k = `${radius.toFixed(4)}:${w}:${h}`;
+  if (!_geoCache.has(k)) _geoCache.set(k, new THREE.SphereGeometry(radius, w, h));
+  return _geoCache.get(k)!;
+}
+
+function _cachedPhongMat(color: THREE.Color, shininess: number, emissive: THREE.Color): THREE.MeshPhongMaterial {
+  const k = `${color.getHexString()}:${shininess}:${emissive.getHexString()}`;
+  if (!_matCache.has(k)) {
+    _matCache.set(k, new THREE.MeshPhongMaterial({
+      color: color.clone(),
+      shininess,
+      specular: new THREE.Color(0x666666),
+      emissive: emissive.clone(),
+    }));
+  }
+  return _matCache.get(k)!;
+}
+
+function _cachedHaloMat(color: THREE.Color, opacity: number): THREE.MeshBasicMaterial {
+  const k = `${color.getHexString()}:${opacity}`;
+  if (!_haloMatCache.has(k)) {
+    _haloMatCache.set(k, new THREE.MeshBasicMaterial({
+      color: color.clone(),
+      transparent: true,
+      opacity,
+      side: THREE.BackSide,
+    }));
+  }
+  return _haloMatCache.get(k)!;
+}
+
 // MeshPhong sphere + optional glow halo — gives stereoscopic depth via specular highlights
 // animationType modifies emissiveIntensity and halo geometry independently of the static glow flag.
+// T004: reuses cached geometries/materials to minimise GPU allocations per frame.
 function buildNodeObject(node: GraphNode): THREE.Group {
   const size  = Math.cbrt(node.val) * 2;
   const color = new THREE.Color(node.color);
   const group = new THREE.Group();
 
   // Determine emissive contribution from animationType
-  // - pulse: bright emissive pulse (higher than static glow)
-  // - ripple: mild emissive, halo is the main effect
-  // - glow: strong emissive aura
-  let emissiveColor: THREE.Color;
-  if (node.animationType === 'pulse') {
-    emissiveColor = color.clone().multiplyScalar(0.55);
-  } else if (node.animationType === 'glow') {
-    emissiveColor = color.clone().multiplyScalar(0.6);
-  } else if (node.animationType === 'ripple') {
-    emissiveColor = color.clone().multiplyScalar(0.25);
-  } else if (node.glow) {
-    emissiveColor = color.clone().multiplyScalar(0.3);
-  } else {
-    emissiveColor = new THREE.Color(0x000000);
-  }
+  let emissiveScalar = 0;
+  if      (node.animationType === 'glow')   emissiveScalar = 0.60;
+  else if (node.animationType === 'pulse')  emissiveScalar = 0.55;
+  else if (node.animationType === 'ripple') emissiveScalar = 0.25;
+  else if (node.glow)                        emissiveScalar = 0.30;
 
-  // Core sphere: Phong shading adds specular highlights that convey 3D depth
-  const geo = new THREE.SphereGeometry(size, 16, 8);
-  const mat = new THREE.MeshPhongMaterial({
-    color,
-    shininess: node.animationType === 'pulse' ? 120 : 60,
-    specular:  new THREE.Color(0x666666),
-    emissive:  emissiveColor,
-  });
+  const emissiveColor = emissiveScalar > 0
+    ? color.clone().multiplyScalar(emissiveScalar)
+    : new THREE.Color(0x000000);
+
+  const shininess = node.animationType === 'pulse' ? 120 : 60;
+
+  // Core sphere — reuse cached geo + mat
+  const geo = _cachedSphereGeo(size, 16, 8);
+  const mat = _cachedPhongMat(color, shininess, emissiveColor);
   group.add(new THREE.Mesh(geo, mat));
 
-  // Halo rendering:
-  //   - ripple: larger halo (size * 3.5) for ripple-outward feel
-  //   - pulse: normal halo with higher opacity to convey intensity
-  //   - glow: normal halo size but stronger opacity
-  //   - static glow: original behaviour
+  // Halo — ripple spreads wider, pulse/glow are brighter
   const shouldShowHalo = node.glow || node.animationType != null;
   if (shouldShowHalo) {
-    const haloSize =
-      node.animationType === 'ripple' ? size * 3.5
-      : size * 2.8;
+    const haloRadius  = node.animationType === 'ripple' ? size * 3.5 : size * 2.8;
+    const haloOpacity = node.animationType === 'pulse'  ? 0.35
+                      : node.animationType === 'glow'   ? 0.30
+                      : node.animationType === 'ripple' ? 0.15
+                      : 0.18;
 
-    const haloOpacity =
-      node.animationType === 'pulse'  ? 0.35
-      : node.animationType === 'glow' ? 0.30
-      : node.animationType === 'ripple' ? 0.15
-      : 0.18; // static glow default
+    const haloGeoKey = `${haloRadius.toFixed(4)}:12:6`;
+    if (!_haloGeoCache.has(haloGeoKey))
+      _haloGeoCache.set(haloGeoKey, new THREE.SphereGeometry(haloRadius, 12, 6));
 
-    const haloGeo = new THREE.SphereGeometry(haloSize, 12, 6);
-    const haloMat = new THREE.MeshBasicMaterial({
-      color,
-      transparent: true,
-      opacity: haloOpacity,
-      side: THREE.BackSide,
-    });
+    const haloGeo = _haloGeoCache.get(haloGeoKey)!;
+    const haloMat = _cachedHaloMat(color, haloOpacity);
     group.add(new THREE.Mesh(haloGeo, haloMat));
   }
 
