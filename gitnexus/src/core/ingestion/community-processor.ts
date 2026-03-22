@@ -383,7 +383,7 @@ const generateHeuristicLabel = (
   });
   // Use dominant type + most-connected symbol name
   if (dominantType && names.length > 0) {
-    const sortedNames = names.sort((a, b) => a.length - b.length);
+    const sortedNames = [...names].sort((a, b) => a.length - b.length);
     const shortestName = sortedNames[0];
     return `${dominantType}_${shortestName}`;
   }
