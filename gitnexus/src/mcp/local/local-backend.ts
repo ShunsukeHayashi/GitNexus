@@ -1137,44 +1137,66 @@ export class LocalBackend {
     const { execFileSync } = await import('child_process');
 
     // Build git diff args based on scope (using execFileSync to avoid shell injection)
+    // Use --name-status to distinguish Added/Modified/Deleted
     let diffArgs: string[];
     switch (scope) {
       case 'staged':
-        diffArgs = ['diff', '--staged', '--name-only'];
+        diffArgs = ['diff', '--staged', '--name-status'];
         break;
       case 'all':
-        diffArgs = ['diff', 'HEAD', '--name-only'];
+        diffArgs = ['diff', 'HEAD', '--name-status'];
         break;
       case 'compare':
         if (!params.base_ref) return { error: 'base_ref is required for "compare" scope' };
-        diffArgs = ['diff', params.base_ref, '--name-only'];
+        diffArgs = ['diff', params.base_ref, '--name-status'];
         break;
       case 'unstaged':
       default:
-        diffArgs = ['diff', '--name-only'];
+        diffArgs = ['diff', '--name-status'];
         break;
     }
 
-    let changedFiles: string[];
+    // Parse --name-status output: each line is "<status>\t<file>" (or "<status>\t<old>\t<new>" for renames)
+    type FileChangeType = 'Added' | 'Modified' | 'Deleted';
+    interface FileChange { file: string; changeType: FileChangeType; }
+
+    let fileChanges: FileChange[];
     try {
       const output = execFileSync('git', diffArgs, { cwd: repo.repoPath, encoding: 'utf-8' });
-      changedFiles = output.trim().split('\n').filter(f => f.length > 0);
+      fileChanges = output.trim().split('\n').filter(l => l.length > 0).map(line => {
+        const parts = line.split('\t');
+        const status = parts[0].charAt(0); // A, M, D, R, C, etc.
+        const file = parts.length >= 3 ? parts[2] : parts[1]; // For renames, use new path
+        let changeType: FileChangeType;
+        switch (status) {
+          case 'A': changeType = 'Added'; break;
+          case 'D': changeType = 'Deleted'; break;
+          default: changeType = 'Modified'; break; // M, R, C, T, U, X all treated as Modified
+        }
+        return { file, changeType };
+      });
     } catch (err: any) {
       return { error: `Git diff failed: ${err.message}` };
     }
     
-    if (changedFiles.length === 0) {
+    if (fileChanges.length === 0) {
       return {
-        summary: { changed_count: 0, affected_count: 0, risk_level: 'none', message: 'No changes detected.' },
+        summary: { changed_count: 0, affected_count: 0, risk_level: 'none', risk_score: 0, message: 'No changes detected.' },
         changed_symbols: [],
         affected_processes: [],
       };
     }
+
+    // Build a file→changeType lookup for fast access
+    const fileChangeTypeMap = new Map<string, FileChangeType>();
+    for (const fc of fileChanges) {
+      fileChangeTypeMap.set(fc.file.replace(/\\/g, '/'), fc.changeType);
+    }
     
-    // Map changed files to indexed symbols
+    // Map changed files to indexed symbols, inheriting the file-level change type
     const changedSymbols: any[] = [];
-    for (const file of changedFiles) {
-      const normalizedFile = file.replace(/\\/g, '/');
+    for (const fc of fileChanges) {
+      const normalizedFile = fc.file.replace(/\\/g, '/');
       try {
         const symbols = await executeParameterized(repo.id, `
           MATCH (n) WHERE n.filePath CONTAINS $filePath
@@ -1187,7 +1209,7 @@ export class LocalBackend {
             name: sym.name || sym[1],
             type: sym.type || sym[2],
             filePath: sym.filePath || sym[3],
-            change_type: 'Modified',
+            change_type: fc.changeType,
           });
         }
       } catch (e) { logQueryError('detect-changes:file-symbols', e); }
@@ -1221,14 +1243,25 @@ export class LocalBackend {
     }
 
     const processCount = affectedProcesses.size;
-    const risk = processCount === 0 ? 'low' : processCount <= 5 ? 'medium' : processCount <= 15 ? 'high' : 'critical';
+
+    // Weighted risk score: Modified symbols with callers are high risk,
+    // Deleted symbols break callers, Added symbols are low risk (no callers yet).
+    const addedCount = changedSymbols.filter(s => s.change_type === 'Added').length;
+    const modifiedCount = changedSymbols.filter(s => s.change_type === 'Modified').length;
+    const deletedCount = changedSymbols.filter(s => s.change_type === 'Deleted').length;
+    const riskScore = (modifiedCount * 3) + (deletedCount * 5) + (addedCount * 0.1);
+    const risk = riskScore === 0 ? 'none' : riskScore < 10 ? 'low' : riskScore < 50 ? 'medium' : riskScore < 150 ? 'high' : 'critical';
     
     return {
       summary: {
         changed_count: changedSymbols.length,
+        added_count: addedCount,
+        modified_count: modifiedCount,
+        deleted_count: deletedCount,
         affected_count: processCount,
-        changed_files: changedFiles.length,
+        changed_files: fileChanges.length,
         risk_level: risk,
+        risk_score: Math.round(riskScore * 10) / 10,
       },
       changed_symbols: changedSymbols,
       affected_processes: Array.from(affectedProcesses.values()),

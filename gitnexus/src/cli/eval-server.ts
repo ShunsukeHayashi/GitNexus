@@ -221,14 +221,18 @@ export function formatDetectChangesResult(result: any): string {
   }
 
   lines.push(`Changes: ${summary.changed_files || 0} files, ${summary.changed_count || 0} symbols`);
+  if (summary.added_count !== undefined || summary.modified_count !== undefined || summary.deleted_count !== undefined) {
+    lines.push(`  Added: ${summary.added_count || 0}, Modified: ${summary.modified_count || 0}, Deleted: ${summary.deleted_count || 0}`);
+  }
   lines.push(`Affected processes: ${summary.affected_count || 0}`);
-  lines.push(`Risk level: ${summary.risk_level || 'unknown'}\n`);
+  lines.push(`Risk: ${summary.risk_level || 'unknown'}${summary.risk_score !== undefined ? ` (score: ${summary.risk_score})` : ''}\n`);
 
   const changed = result.changed_symbols || [];
   if (changed.length > 0) {
     lines.push(`Changed symbols:`);
     for (const s of changed.slice(0, 15)) {
-      lines.push(`  ${s.type} ${s.name} → ${s.filePath}`);
+      const tag = s.change_type ? `[${s.change_type}]` : '';
+      lines.push(`  ${tag} ${s.type} ${s.name} → ${s.filePath}`);
     }
     if (changed.length > 15) lines.push(`  ... and ${changed.length - 15} more`);
     lines.push('');
