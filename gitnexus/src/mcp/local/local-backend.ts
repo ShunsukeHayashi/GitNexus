@@ -1140,25 +1140,31 @@ export class LocalBackend {
     let diffArgs: string[];
     switch (scope) {
       case 'staged':
-        diffArgs = ['diff', '--staged', '--name-only'];
+        diffArgs = ['diff', '--staged', '--name-status'];
         break;
       case 'all':
-        diffArgs = ['diff', 'HEAD', '--name-only'];
+        diffArgs = ['diff', 'HEAD', '--name-status'];
         break;
       case 'compare':
         if (!params.base_ref) return { error: 'base_ref is required for "compare" scope' };
-        diffArgs = ['diff', params.base_ref, '--name-only'];
+        diffArgs = ['diff', params.base_ref, '--name-status'];
         break;
       case 'unstaged':
       default:
-        diffArgs = ['diff', '--name-only'];
+        diffArgs = ['diff', '--name-status'];
         break;
     }
 
-    let changedFiles: string[];
+    // Parse --name-status output: "A\tfile.ts", "M\tfile.ts", "D\tfile.ts"
+    let changedFiles: Array<{ file: string; status: string }>;
     try {
       const output = execFileSync('git', diffArgs, { cwd: repo.repoPath, encoding: 'utf-8' });
-      changedFiles = output.trim().split('\n').filter(f => f.length > 0);
+      changedFiles = output.trim().split('\n').filter(f => f.length > 0).map(line => {
+        const parts = line.split('\t');
+        const status = parts[0]?.charAt(0) || 'M';
+        const file = parts[1] || parts[0] || '';
+        return { file, status };
+      });
     } catch (err: any) {
       return { error: `Git diff failed: ${err.message}` };
     }
@@ -1171,10 +1177,20 @@ export class LocalBackend {
       };
     }
     
+    // Map git status codes to human-readable change types
+    const STATUS_MAP: Record<string, string> = {
+      'A': 'Added',
+      'M': 'Modified',
+      'D': 'Deleted',
+      'R': 'Renamed',
+      'C': 'Copied',
+    };
+
     // Map changed files to indexed symbols
     const changedSymbols: any[] = [];
-    for (const file of changedFiles) {
+    for (const { file, status } of changedFiles) {
       const normalizedFile = file.replace(/\\/g, '/');
+      const changeType = STATUS_MAP[status] || 'Modified';
       try {
         const symbols = await executeParameterized(repo.id, `
           MATCH (n) WHERE n.filePath CONTAINS $filePath
@@ -1187,7 +1203,7 @@ export class LocalBackend {
             name: sym.name || sym[1],
             type: sym.type || sym[2],
             filePath: sym.filePath || sym[3],
-            change_type: 'Modified',
+            change_type: changeType,
           });
         }
       } catch (e) { logQueryError('detect-changes:file-symbols', e); }
@@ -1221,14 +1237,27 @@ export class LocalBackend {
     }
 
     const processCount = affectedProcesses.size;
-    const risk = processCount === 0 ? 'low' : processCount <= 5 ? 'medium' : processCount <= 15 ? 'high' : 'critical';
+    // Weighted risk: deleted symbols are highest risk, added are lowest
+    const addedCount = changedSymbols.filter(s => s.change_type === 'Added').length;
+    const modifiedCount = changedSymbols.filter(s => s.change_type === 'Modified').length;
+    const deletedCount = changedSymbols.filter(s => s.change_type === 'Deleted').length;
+    const weightedScore = (modifiedCount * 3) + (deletedCount * 5) + (addedCount * 0.1);
+    const risk = weightedScore === 0 ? 'none'
+      : weightedScore <= 10 ? 'low'
+      : weightedScore <= 30 ? 'medium'
+      : weightedScore <= 75 ? 'high'
+      : 'critical';
     
     return {
       summary: {
         changed_count: changedSymbols.length,
+        added_count: addedCount,
+        modified_count: modifiedCount,
+        deleted_count: deletedCount,
         affected_count: processCount,
         changed_files: changedFiles.length,
         risk_level: risk,
+        risk_score: Math.round(weightedScore),
       },
       changed_symbols: changedSymbols,
       affected_processes: Array.from(affectedProcesses.values()),
