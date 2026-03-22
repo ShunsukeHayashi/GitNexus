@@ -99,3 +99,7 @@ To check whether embeddings exist, inspect `.gitnexus/meta.json` — the `stats.
 | Index, status, clean, wiki CLI commands | `.claude/skills/gitnexus/gitnexus-cli/SKILL.md` |
 
 <!-- gitnexus:end -->
+
+## Swarm Coordination
+- Read .claude/rules/swarm-coordination.md BEFORE pushing commits or fixing CI failures if you are operating as part of an autonomous swarm.
+- If fixing a failing test, always fetch and rebase on origin/main first.
