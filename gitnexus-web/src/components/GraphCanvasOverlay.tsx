@@ -20,7 +20,9 @@ import {
   TOOL_COLOR,
   HIGHLIGHT_COLOR,
   BLAST_COLOR,
+  AGENT_AURA_COLOR,
 } from '../lib/graphNodeUtils';
+import type { ActiveAgentWork } from '../core/graph/types';
 
 // Minimal shape of the selected node needed by this UI layer.
 interface OverlayNode {
@@ -36,6 +38,8 @@ export interface GraphCanvasOverlayProps {
   onZoomIn:             () => void;
   onZoomOut:            () => void;
   onResetCamera:        () => void;
+  /** T025: active agent work entries — used to display counter in the legend */
+  activeAgents?:        ActiveAgentWork[];
 }
 
 export function GraphCanvasOverlay({
@@ -46,6 +50,7 @@ export function GraphCanvasOverlay({
   onZoomIn,
   onZoomOut,
   onResetCamera,
+  activeAgents = [],
 }: GraphCanvasOverlayProps) {
   return (
     <>
@@ -159,6 +164,35 @@ export function GraphCanvasOverlay({
             />
             <span className="text-xs text-white/60">Blast Radius</span>
           </div>
+
+          {/* T025: Active AI Agent counter — only shown when agents are present */}
+          {activeAgents.length > 0 && (
+            <>
+              <div className="border-t border-white/10 my-1" />
+              <div className="flex items-center gap-2">
+                <div
+                  className="w-2.5 h-2.5 rounded-full flex-shrink-0 animate-pulse"
+                  style={{ backgroundColor: AGENT_AURA_COLOR }}
+                />
+                <span className="text-xs font-medium" style={{ color: AGENT_AURA_COLOR }}>
+                  Active Agents: {activeAgents.length}
+                </span>
+              </div>
+              {activeAgents.map(agent => (
+                <div key={agent.agentId} className="flex items-center gap-1.5 pl-4">
+                  <span
+                    className="text-xs"
+                    style={{ color: agent.status === 'writing' ? '#f87171' : '#6ee7b7' }}
+                  >
+                    {agent.status === 'writing' ? '✏' : '👁'}
+                  </span>
+                  <span className="text-xs text-white/50 truncate max-w-[120px]" title={agent.agentId}>
+                    {agent.agentId}
+                  </span>
+                </div>
+              ))}
+            </>
+          )}
         </div>
       </div>
 

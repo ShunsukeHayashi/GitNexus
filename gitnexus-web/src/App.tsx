@@ -13,6 +13,7 @@ import { FileEntry } from './services/zip';
 import { getActiveProviderConfig } from './core/llm/settings-service';
 import { createKnowledgeGraph } from './core/graph/graph';
 import { connectToServer, fetchRepos, normalizeServerUrl, type ConnectToServerResult } from './services/server-connection';
+import { useActiveAgents } from './hooks/useActiveAgents';
 
 const AppContent = () => {
   const {
@@ -44,6 +45,9 @@ const AppContent = () => {
   } = useAppState();
 
   const graphCanvasRef = useRef<GraphCanvasHandle>(null);
+
+  // T025: Poll server for active AI agent work (reading/writing nodes)
+  const activeAgents = useActiveAgents(serverBaseUrl);
 
   const handleFileSelect = useCallback(async (file: File) => {
     const projectName = file.name.replace('.zip', '');
@@ -288,7 +292,7 @@ const AppContent = () => {
 
         {/* Graph area - takes remaining space */}
         <div className="flex-1 relative min-w-0">
-          <GraphCanvas ref={graphCanvasRef} />
+          <GraphCanvas ref={graphCanvasRef} activeAgents={activeAgents} />
 
           {/* Code References Panel (overlay) - does NOT resize the graph, it overlaps on top */}
           {isCodePanelOpen && (codeReferences.length > 0 || !!selectedNode) && (

@@ -12,12 +12,18 @@ import {
   buildNodeObject,
 } from '../lib/graphNodeUtils';
 import { GraphCanvasOverlay } from './GraphCanvasOverlay';
+import type { ActiveAgentWork } from '../core/graph/types';
 
 export interface GraphCanvasHandle {
   focusNode: (nodeId: string) => void;
 }
 
-export const GraphCanvas = forwardRef<GraphCanvasHandle>((_, ref) => {
+export interface GraphCanvasProps {
+  /** T025: active agent work entries from useActiveAgents hook */
+  activeAgents?: ActiveAgentWork[];
+}
+
+export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(({ activeAgents = [] }, ref) => {
   const {
     graph,
     setSelectedNode,
@@ -106,7 +112,19 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((_, ref) => {
     animatedNodes,
   ]);
 
-  const nodeThreeObject = useCallback((node: unknown) => buildNodeObject(node as GraphNode), []);
+  // T025: Build a Set of nodeIds currently being worked on by AI agents for O(1) lookup
+  const activeAgentNodeIds = useMemo(
+    () => new Set(activeAgents.map(a => a.nodeId)),
+    [activeAgents],
+  );
+
+  const nodeThreeObject = useCallback(
+    (node: unknown) => {
+      const n = node as GraphNode;
+      return buildNodeObject(n, activeAgentNodeIds.has(n.id));
+    },
+    [activeAgentNodeIds],
+  );
 
   const handleNodeClick = useCallback((node: GraphNode) => {
     if (!node?.raw) return;
@@ -190,6 +208,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((_, ref) => {
         onZoomIn={handleZoomIn}
         onZoomOut={handleZoomOut}
         onResetCamera={handleResetCamera}
+        activeAgents={activeAgents}
       />
     </div>
   );
