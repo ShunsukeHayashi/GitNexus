@@ -199,16 +199,6 @@ export const createChatModel = (config: ProviderConfig): BaseChatModel => {
     case 'openrouter': {
       const openRouterConfig = config as OpenRouterConfig;
 
-      // Debug logging
-      if (import.meta.env.DEV) {
-        console.log('🌐 OpenRouter config:', {
-          hasApiKey: !!openRouterConfig.apiKey,
-          apiKeyLength: openRouterConfig.apiKey?.length || 0,
-          model: openRouterConfig.model,
-          baseUrl: openRouterConfig.baseUrl,
-        });
-      }
-
       if (!openRouterConfig.apiKey || openRouterConfig.apiKey.trim() === '') {
         throw new Error('OpenRouter API key is required but was not provided');
       }
@@ -539,7 +529,11 @@ export async function* streamAgentResponse(
     }
     yield { 
       type: 'error', 
-      error: message,
+      error: message.includes('context length')
+        ? `${message}. Try reducing conversation length or increasing the model context window.`
+        : message.includes('connection refused') || message.includes('ECONNREFUSED')
+        ? `${message}. Check that your Ollama server is running at the configured URL.`
+        : message,
     };
   }
 }
