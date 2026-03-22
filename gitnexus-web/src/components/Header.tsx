@@ -200,7 +200,7 @@ export const Header = ({ onFocusNode, availableRepos = [], onSwitchRepo }: Heade
           <div className="absolute top-full left-0 right-0 mt-1 bg-surface border border-border-subtle rounded-lg shadow-xl overflow-hidden z-50">
             {searchResults.length === 0 ? (
               <div className="px-4 py-3 text-sm text-text-muted">
-                No nodes found for \"{searchQuery}\"
+                No nodes found for "{searchQuery}"
               </div>
             ) : (
               <div className="max-h-80 overflow-y-auto">
