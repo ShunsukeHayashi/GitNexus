@@ -29,6 +29,12 @@ import {
   buildDynamicSystemPrompt,
 } from './context-builder';
 
+/** Development-only logging. Completely stripped in production builds. */
+const __DEV_LOG = (...args: unknown[]) => {
+  if (import.meta.env.DEV) console.log('[nexus-ai]', ...args);
+};
+
+
 /**
  * System prompt for the Graph RAG agent
  * 
@@ -82,21 +88,8 @@ You are an investigator. For each question:
 ## 📊 GRAPH SCHEMA
 Nodes: File, Folder, Function, Class, Interface, Method, Community, Process
 Relations: \`CodeRelation\` with \`type\` property: CONTAINS, DEFINES, IMPORTS, CALLS, EXTENDS, IMPLEMENTS, MEMBER_OF, STEP_IN_PROCESS
-
-## 📐 GRAPH SEMANTICS (Important!)
-**Edge Types:**
-- \`CALLS\`: Method invocation OR constructor injection. If A receives B as parameter and uses it, A→B is CALLS. This is intentional simplification.
-- \`IMPORTS\`: File-level import/include statement.
-- \`EXTENDS/IMPLEMENTS\`: Class inheritance.
-
-**Process Nodes:**
-- Process labels use format: "EntryPoint → Terminal" (e.g., "onCreate → showToast")
-- These are heuristic names from tracing execution flow, NOT application-defined names
-- Entry points are detected via export status, naming patterns, and framework conventions
-
-Cypher examples:
-- \`MATCH (f:Function) RETURN f.name LIMIT 10\`
-- \`MATCH (f:File)-[:CodeRelation {type: 'IMPORTS'}]->(g:File) RETURN f.name, g.name\`
+Note: CALLS includes constructor injection. Process labels are heuristic (EntryPoint → Terminal).
+Full schema and Cypher examples available in the cypher tool description.
 
 ## 📝CRITICAL RULES
 - **impact output is trusted.** Do NOT re-validate with cypher. Optionally run the suggested grep commands for dynamic patterns.
@@ -114,16 +107,8 @@ Think like a senior architect. Be concise—no fluff, short, precise and to the 
 - Surface deep insights: patterns, coupling, design decisions
 - End with **TL;DR** (short summary of the response, summing up the response and the most critical parts)
 
-## MERMAID RULES
-When generating diagrams:
-- NO special characters in node labels: quotes, (), /, &, <, >
-- Wrap labels with spaces in quotes: A["My Label"]
-- Use simple IDs: A, B, C or auth, db, api
-- Flowchart: graph TD or graph LR (not flowchart)
-- Always test mentally: would this parse?
-
-BAD:  A[User's Data] --> B(Process & Save)
-GOOD: A["User Data"] --> B["Process and Save"]
+## MERMAID
+Use graph TD/LR. Quote labels with spaces: A["My Label"]. No special chars in IDs.
 `;
 export const createChatModel = (config: ProviderConfig): BaseChatModel => {
   switch (config.provider) {
@@ -302,9 +287,7 @@ export const createGraphRAGAgent = (
     : BASE_SYSTEM_PROMPT;
   
   // Log the full prompt for debugging
-  if (import.meta.env.DEV) {
-    console.log('🤖 AGENT SYSTEM PROMPT:\n', systemPrompt);
-  }
+  __DEV_LOG('system prompt length:', systemPrompt.length, 'chars');
   
   const agent = createReactAgent({
     llm: model as any,
@@ -381,12 +364,7 @@ export async function* streamAgentResponse(
       }
       
       // DEBUG: Enhanced logging
-      if (import.meta.env.DEV) {
-        const msgType = mode === 'messages' && data?.[0]?._getType?.() || 'n/a';
-        const hasContent = mode === 'messages' && data?.[0]?.content;
-        const hasToolCalls = mode === 'messages' && data?.[0]?.tool_calls?.length > 0;
-        console.log(`🔄 [${mode}] type:${msgType} content:${!!hasContent} tools:${hasToolCalls}`);
-      }
+      // Stream event handling (debug logging via __DEV_LOG)
       // Handle 'messages' mode - token-by-token streaming
       if (mode === 'messages') {
         const [msg] = Array.isArray(data) ? data : [data];
@@ -526,17 +504,11 @@ export async function* streamAgentResponse(
       }
     }
     
-    // DEBUG: Stream completed normally
-    if (import.meta.env.DEV) {
-      console.log('✅ Stream completed normally, yielding done');
-    }
+    __DEV_LOG('stream completed');
     yield { type: 'done' };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    // DEBUG: Stream error
-    if (import.meta.env.DEV) {
-      console.error('❌ Stream error:', message, error);
-    }
+    __DEV_LOG('stream error:', message);
     yield { 
       type: 'error', 
       error: message,
