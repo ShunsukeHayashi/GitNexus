@@ -193,9 +193,34 @@ function _cachedHaloMat(color: THREE.Color, opacity: number): THREE.MeshBasicMat
 }
 
 // ---------------------------------------------------------------------------
+// T025: Golden aura color constant for active AI agent work
+// ---------------------------------------------------------------------------
+
+/** Golden aura color (#fbbf24) rendered on nodes being actively read/written by an AI agent */
+export const AGENT_AURA_COLOR = '#fbbf24';
+
+// Cache for T025 agent aura geometry/material (reused across all active nodes)
+const _agentAuraGeoCache = new Map<string, THREE.SphereGeometry>();
+const _agentAuraMatCache = new Map<string, THREE.MeshBasicMaterial>();
+
+function _cachedAgentAuraMat(color: THREE.Color, opacity: number): THREE.MeshBasicMaterial {
+  const k = `${color.getHexString()}:${opacity}`;
+  if (!_agentAuraMatCache.has(k)) {
+    _agentAuraMatCache.set(k, new THREE.MeshBasicMaterial({
+      color:       color.clone(),
+      transparent: true,
+      opacity,
+      side:        THREE.BackSide,
+    }));
+  }
+  return _agentAuraMatCache.get(k)!;
+}
+
+// ---------------------------------------------------------------------------
 // buildNodeObject — MeshPhong sphere + optional glow halo
 // Reuses cached geometries/materials (T004) to minimise GPU allocations per frame.
 // animationType modifies emissive intensity and halo size independently of glow flag.
+// T025: accepts an optional `isAgentActive` flag to add a golden aura.
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
@@ -224,7 +249,7 @@ function _cachedRingMat(hex: string, opacity: number): THREE.MeshBasicMaterial {
   return _ringMatCache.get(k)!;
 }
 
-export function buildNodeObject(node: GraphNode): THREE.Group {
+export function buildNodeObject(node: GraphNode, isAgentActive = false): THREE.Group {
   const size  = Math.cbrt(node.val) * 2;
   const color = new THREE.Color(node.color);
   const group = new THREE.Group();
@@ -294,6 +319,20 @@ export function buildNodeObject(node: GraphNode): THREE.Group {
     group.add(new THREE.Mesh(
       _haloGeoCache.get(tintGeoKey)!,
       _cachedHaloMat(new THREE.Color(tintHex), 0.12),
+    ));
+  }
+
+  // T025: Golden aura for nodes being actively read/written by an AI agent
+  if (isAgentActive) {
+    const auraRadius  = size * 4.2;
+    const auraColor   = new THREE.Color(AGENT_AURA_COLOR);
+    const auraGeoKey  = `${auraRadius.toFixed(4)}:14:7`;
+    if (!_agentAuraGeoCache.has(auraGeoKey)) {
+      _agentAuraGeoCache.set(auraGeoKey, new THREE.SphereGeometry(auraRadius, 14, 7));
+    }
+    group.add(new THREE.Mesh(
+      _agentAuraGeoCache.get(auraGeoKey)!,
+      _cachedAgentAuraMat(auraColor, 0.35),
     ));
   }
 

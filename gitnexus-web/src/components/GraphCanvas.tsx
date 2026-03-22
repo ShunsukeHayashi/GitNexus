@@ -14,7 +14,7 @@ import {
   buildNodeObject, getRepoColor,
 } from '../lib/graphNodeUtils';
 import { GraphCanvasOverlay } from './GraphCanvasOverlay';
-import type { UserPresence } from '../core/graph/types';
+import type { UserPresence, ActiveAgentWork } from '../core/graph/types';
 
 export interface GraphCanvasHandle {
   focusNode: (nodeId: string) => void;
@@ -60,9 +60,11 @@ function buildCrossRepoLinkObject(link: GraphLink): THREE.Object3D {
 export interface GraphCanvasProps {
   /** T023: list of currently active presence users from usePresence() hook */
   presenceUsers?: UserPresence[];
+  /** T025: active agent work entries from useActiveAgents hook */
+  activeAgents?: ActiveAgentWork[];
 }
 
-export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(({ presenceUsers }, ref) => {
+export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(({ presenceUsers, activeAgents = [] }, ref) => {
   const {
     graph,
     setSelectedNode,
@@ -243,7 +245,19 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(({ pr
     fg.d3ReheatSimulation();
   }, [graphData]);
 
-  const nodeThreeObject = useCallback((node: unknown) => buildNodeObject(node as GraphNode), []);
+  // T025: Build a Set of nodeIds currently being worked on by AI agents for O(1) lookup
+  const activeAgentNodeIds = useMemo(
+    () => new Set(activeAgents.map(a => a.nodeId)),
+    [activeAgents],
+  );
+
+  const nodeThreeObject = useCallback(
+    (node: unknown) => {
+      const n = node as GraphNode;
+      return buildNodeObject(n, activeAgentNodeIds.has(n.id));
+    },
+    [activeAgentNodeIds],
+  );
 
   // ---------------------------------------------------------------------------
   // T012: CROSS_REPO_CALL dashed-line Three.js object.
@@ -375,6 +389,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(({ pr
         onResetCamera={handleResetCamera}
         presenceUsers={presenceUsers}
         repoNames={repoNames}
+        activeAgents={activeAgents}
       />
     </div>
   );

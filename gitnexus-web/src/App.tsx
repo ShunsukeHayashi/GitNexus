@@ -14,6 +14,7 @@ import { getActiveProviderConfig } from './core/llm/settings-service';
 import { createKnowledgeGraph } from './core/graph/graph';
 import { connectToServer, fetchRepos, normalizeServerUrl, type ConnectToServerResult } from './services/server-connection';
 import { usePresence } from './hooks/usePresence';
+import { useActiveAgents } from './hooks/useActiveAgents';
 
 const AppContent = () => {
   const {
@@ -49,6 +50,8 @@ const AppContent = () => {
   // T023: Poll presence endpoint when connected to a server.
   // In zip/local mode serverBaseUrl is undefined, so polling is disabled.
   const presenceUsers = usePresence(serverBaseUrl ?? undefined);
+  // T025: Poll server for active AI agent work (reading/writing nodes)
+  const activeAgents = useActiveAgents(serverBaseUrl);
 
   const handleFileSelect = useCallback(async (file: File) => {
     const projectName = file.name.replace('.zip', '');
@@ -293,7 +296,7 @@ const AppContent = () => {
 
         {/* Graph area - takes remaining space */}
         <div className="flex-1 relative min-w-0">
-          <GraphCanvas ref={graphCanvasRef} presenceUsers={presenceUsers} />
+          <GraphCanvas ref={graphCanvasRef} presenceUsers={presenceUsers} activeAgents={activeAgents} />
 
           {/* Code References Panel (overlay) - does NOT resize the graph, it overlaps on top */}
           {isCodePanelOpen && (codeReferences.length > 0 || !!selectedNode) && (

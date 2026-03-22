@@ -85,6 +85,18 @@ export interface GraphRelationship {
   targetRepo?: string,
 }
 
+// ---------------------------------------------------------------------------
+// T025: Active Agent Work — represents an AI agent currently reading/writing a node
+// ---------------------------------------------------------------------------
+
+export interface ActiveAgentWork {
+  agentId: string;
+  nodeId: string;
+  status: 'reading' | 'writing';
+  avatar?: string;
+  updatedAt?: number;
+}
+
 export interface KnowledgeGraph {
   nodes: GraphNode[],
   relationships: GraphRelationship[],

@@ -156,6 +156,31 @@ const buildGraph = async (): Promise<{ nodes: GraphNode[]; relationships: GraphR
   return { nodes, relationships };
 };
 
+// ---------------------------------------------------------------------------
+// T025: Active Agent Work registry (in-memory, no persistence)
+// ---------------------------------------------------------------------------
+
+interface AgentWorkEntry {
+  agentId: string;
+  nodeId: string;
+  status: 'reading' | 'writing';
+  avatar?: string;
+  updatedAt: number;
+}
+
+/** Stale timeout: entries older than 30 seconds are removed automatically */
+const AGENT_STALE_MS = 30_000;
+
+const activeAgentWork = new Map<string, AgentWorkEntry>();
+
+function getActiveAgents(): AgentWorkEntry[] {
+  const now = Date.now();
+  for (const [key, entry] of activeAgentWork) {
+    if (now - entry.updatedAt > AGENT_STALE_MS) activeAgentWork.delete(key);
+  }
+  return Array.from(activeAgentWork.values());
+}
+
 const statusFromError = (err: any): number => {
   const msg = String(err?.message ?? '');
   if (msg.includes('No indexed repositories') || msg.includes('not found')) return 404;
@@ -499,6 +524,36 @@ export const createServer = async (port: number, host: string = '127.0.0.1') => 
     } catch (err: any) {
       res.status(statusFromError(err)).json({ error: err.message || 'Failed to query cluster detail' });
     }
+  });
+
+  // ── T025: Active Agent Work endpoints ───────────────────────────────────────
+
+  // GET /api/agents/active — returns JSON array of currently active agent work
+  app.get('/api/agents/active', (_req, res) => {
+    res.json(getActiveAgents());
+  });
+
+  // POST /api/agents/active — register or update an agent's work on a node
+  // Body: { agentId: string, nodeId: string, status: 'reading' | 'writing', avatar?: string }
+  app.post('/api/agents/active', (req, res) => {
+    const { agentId, nodeId, status, avatar } = req.body as {
+      agentId?: string;
+      nodeId?: string;
+      status?: string;
+      avatar?: string;
+    };
+    if (!agentId || !nodeId || (status !== 'reading' && status !== 'writing')) {
+      res.status(400).json({ error: 'agentId, nodeId, and status (reading|writing) are required' });
+      return;
+    }
+    activeAgentWork.set(agentId, { agentId, nodeId, status, avatar, updatedAt: Date.now() });
+    res.json({ ok: true });
+  });
+
+  // DELETE /api/agents/active/:agentId — remove an agent's active work entry
+  app.delete('/api/agents/active/:agentId', (req, res) => {
+    activeAgentWork.delete(req.params.agentId);
+    res.json({ ok: true });
   });
 
   // Global error handler — catch anything the route handlers miss
