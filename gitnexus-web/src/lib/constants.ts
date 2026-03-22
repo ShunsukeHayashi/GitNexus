@@ -91,13 +91,21 @@ export const FILTERABLE_LABELS: NodeLabel[] = [
 ];
 
 // Edge/Relation types
-export type EdgeType = 'CONTAINS' | 'DEFINES' | 'IMPORTS' | 'CALLS' | 'EXTENDS' | 'IMPLEMENTS';
+export type EdgeType =
+  | 'CONTAINS'
+  | 'DEFINES'
+  | 'IMPORTS'
+  | 'CALLS'
+  | 'CROSS_REPO_CALL'
+  | 'EXTENDS'
+  | 'IMPLEMENTS';
 
 export const ALL_EDGE_TYPES: EdgeType[] = [
   'CONTAINS',
   'DEFINES',
   'IMPORTS',
   'CALLS',
+  'CROSS_REPO_CALL',
   'EXTENDS',
   'IMPLEMENTS',
 ];
@@ -110,6 +118,7 @@ export const DEFAULT_VISIBLE_EDGES: EdgeType[] = [
   'EXTENDS',
   'IMPLEMENTS',
   'CALLS',
+  'CROSS_REPO_CALL',
 ];
 
 // Edge display info for UI
@@ -118,6 +127,7 @@ export const EDGE_INFO: Record<EdgeType, { color: string; label: string }> = {
   DEFINES: { color: '#0e7490', label: 'Defines' },
   IMPORTS: { color: '#1d4ed8', label: 'Imports' },
   CALLS: { color: '#7c3aed', label: 'Calls' },
+  CROSS_REPO_CALL: { color: '#0f766e', label: 'Cross-Repo Calls' },
   EXTENDS: { color: '#c2410c', label: 'Extends' },
   IMPLEMENTS: { color: '#be185d', label: 'Implements' },
 };
