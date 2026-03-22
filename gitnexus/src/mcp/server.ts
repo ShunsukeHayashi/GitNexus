@@ -27,6 +27,7 @@ import { GITNEXUS_TOOLS } from './tools.js';
 import { realStdoutWrite } from './core/lbug-adapter.js';
 import type { LocalBackend } from './local/local-backend.js';
 import { getResourceDefinitions, getResourceTemplates, readResource } from './resources.js';
+import { MCPRouter } from './router.js';
 
 /**
  * Next-step hints appended to tool responses.
@@ -167,6 +168,20 @@ export function createMCPServer(backend: LocalBackend): Server {
     const { name, arguments: args } = request.params;
 
     try {
+      // Remote aggregation tools — handled by MCPRouter, not LocalBackend
+      if (name === 'list_remote_instances') {
+        const router = new MCPRouter();
+        const result = await router.listRemoteInstances();
+        return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+      }
+
+      if (name === 'aggregate_remote_query') {
+        const { query, instance_ids, limit } = (args ?? {}) as { query: string; instance_ids?: string[]; limit?: number };
+        const router = new MCPRouter();
+        const results = await router.aggregateQuery(query, instance_ids, limit ?? 10);
+        return { content: [{ type: 'text' as const, text: JSON.stringify(results, null, 2) }] };
+      }
+
       const result = await backend.callTool(name, args);
       const resultText = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
       const hint = getNextStepHint(name, args as Record<string, any> | undefined);
@@ -174,7 +189,7 @@ export function createMCPServer(backend: LocalBackend): Server {
       return {
         content: [
           {
-            type: 'text',
+            type: 'text' as const,
             text: resultText + hint,
           },
         ],
@@ -184,7 +199,7 @@ export function createMCPServer(backend: LocalBackend): Server {
       return {
         content: [
           {
-            type: 'text',
+            type: 'text' as const,
             text: `Error: ${message}`,
           },
         ],
