@@ -3,6 +3,7 @@ import ForceGraph3D, { ForceGraphMethods } from 'react-force-graph-3d';
 import * as THREE from 'three';
 import { ZoomIn, ZoomOut, Maximize2, Lightbulb, LightbulbOff, X } from 'lucide-react';
 import { useAppState } from '../hooks/useAppState';
+import type { AnimationType } from '../hooks/useAppState';
 import { QueryFAB } from './QueryFAB';
 
 export interface GraphCanvasHandle {
@@ -15,6 +16,8 @@ interface GraphNode {
   val: number;
   color: string;
   glow: boolean;
+  /** Animation type from triggerNodeAnimation; independent of the static glow flag */
+  animationType?: AnimationType;
   raw: any;
   x?: number;
   y?: number;
@@ -56,9 +59,12 @@ const EDGE_COLORS: Record<string, string> = {
 
 const DEFAULT_NODE_COLOR = '#94a3b8';
 const DEFAULT_EDGE_COLOR = '#4a4a70';
-const HIGHLIGHT_COLOR    = '#06b6d4';
-const BLAST_COLOR        = '#ef4444';
-const SELECTED_COLOR     = '#f59e0b';
+// T002: distinct colors for each AI highlight source
+const CITATION_COLOR  = '#06b6d4';  // Cyan   — AI citation grounding
+const TOOL_COLOR      = '#a855f7';  // Purple — AI tool result
+const HIGHLIGHT_COLOR = '#38bdf8';  // Sky    — manual query highlight
+const BLAST_COLOR     = '#ef4444';
+const SELECTED_COLOR  = '#f59e0b';
 
 // MeshPhong sphere + optional glow halo — gives stereoscopic depth via specular highlights
 function buildNodeObject(node: GraphNode): THREE.Group {
@@ -104,6 +110,9 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((_, ref) => {
     aiCitationHighlightedNodeIds,
     aiToolHighlightedNodeIds,
     blastRadiusNodeIds,
+    // T007: filter states now consumed by GraphCanvas
+    visibleLabels,
+    visibleEdgeTypes,
   } = useAppState();
 
   const fgRef = useRef<ForceGraphMethods | undefined>(undefined);
@@ -112,52 +121,71 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((_, ref) => {
     links: [],
   });
 
-  const effectiveHighlightedNodeIds = useMemo(() => {
-    if (!isAIHighlightsEnabled) return highlightedNodeIds;
-    const next = new Set(highlightedNodeIds);
-    for (const id of aiCitationHighlightedNodeIds) next.add(id);
-    for (const id of aiToolHighlightedNodeIds) next.add(id);
-    return next;
-  }, [highlightedNodeIds, aiCitationHighlightedNodeIds, aiToolHighlightedNodeIds, isAIHighlightsEnabled]);
+  // T005: warmupTicks scales with graph size (10–50), avoids over-simulation on small graphs
+  const warmupTicks = useMemo(
+    () => Math.min(50, Math.max(10, Math.ceil((graph?.nodes.length ?? 0) / 20))),
+    [graph?.nodes.length]
+  );
 
-  const effectiveBlastRadiusNodeIds = useMemo(() => {
-    if (!isAIHighlightsEnabled) return new Set<string>();
-    return blastRadiusNodeIds;
-  }, [blastRadiusNodeIds, isAIHighlightsEnabled]);
-
+  // T007: filter + T002: per-source AI color differentiation
   useEffect(() => {
     if (!graph) return;
 
-    const nodes: GraphNode[] = graph.nodes.map(n => {
-      const isBlast    = effectiveBlastRadiusNodeIds.has(n.id);
-      const isSelected = appSelectedNode?.id === n.id;
-      const isHighlit  = effectiveHighlightedNodeIds.has(n.id);
+    const visibleLabelSet = new Set<string>(visibleLabels);
+    const visibleEdgeSet  = new Set<string>(visibleEdgeTypes);
+    const effectiveBlast  = isAIHighlightsEnabled ? blastRadiusNodeIds : new Set<string>();
 
-      const nodeColor = isBlast    ? BLAST_COLOR
-                      : isSelected ? SELECTED_COLOR
-                      : isHighlit  ? HIGHLIGHT_COLOR
-                      : NODE_COLORS[n.label] ?? DEFAULT_NODE_COLOR;
+    const nodes: GraphNode[] = graph.nodes
+      // T007: respect label filter (empty set = show all)
+      .filter(n => visibleLabelSet.size === 0 || visibleLabelSet.has(n.label))
+      .map(n => {
+        const isBlast    = effectiveBlast.has(n.id);
+        const isSelected = appSelectedNode?.id === n.id;
+        // T002: check citation vs tool separately
+        const isCitation = isAIHighlightsEnabled && aiCitationHighlightedNodeIds.has(n.id);
+        const isTool     = isAIHighlightsEnabled && aiToolHighlightedNodeIds.has(n.id);
+        const isHighlit  = highlightedNodeIds.has(n.id);
 
-      return {
-        id:    n.id,
-        name:  n.properties.name,
-        val:   n.label === 'Project'   ? 30 : n.label === 'Package'   ? 20 : n.label === 'Module'    ? 15 :
-               n.label === 'Folder'    ? 10 : n.label === 'File'      ? 7  : n.label === 'Class'     ? 9  :
-               n.label === 'Interface' ? 8  : n.label === 'Function'  ? 4  : n.label === 'Method'    ? 3  : 2,
-        color: nodeColor,
-        glow:  isBlast || isSelected || isHighlit,
-        raw:   n,
-      };
-    });
+        const nodeColor = isBlast    ? BLAST_COLOR
+                        : isSelected ? SELECTED_COLOR
+                        : isTool     ? TOOL_COLOR      // T002: tool purple
+                        : isCitation ? CITATION_COLOR  // T002: citation cyan
+                        : isHighlit  ? HIGHLIGHT_COLOR
+                        : NODE_COLORS[n.label] ?? DEFAULT_NODE_COLOR;
 
-    const links: GraphLink[] = graph.relationships.map(r => ({
-      source: r.sourceId,
-      target: r.targetId,
-      color:  EDGE_COLORS[r.type] ?? DEFAULT_EDGE_COLOR,
-    }));
+        return {
+          id:    n.id,
+          name:  n.properties.name,
+          val:   n.label === 'Project'   ? 30 : n.label === 'Package'   ? 20 : n.label === 'Module'    ? 15 :
+                 n.label === 'Folder'    ? 10 : n.label === 'File'      ? 7  : n.label === 'Class'     ? 9  :
+                 n.label === 'Interface' ? 8  : n.label === 'Function'  ? 4  : n.label === 'Method'    ? 3  : 2,
+          color: nodeColor,
+          glow:  isBlast || isSelected || isCitation || isTool || isHighlit,
+          raw:   n,
+        };
+      });
+
+    const links: GraphLink[] = graph.relationships
+      // T007: respect edge type filter (empty set = show all)
+      .filter(r => visibleEdgeSet.size === 0 || visibleEdgeSet.has(r.type))
+      .map(r => ({
+        source: r.sourceId,
+        target: r.targetId,
+        color:  EDGE_COLORS[r.type] ?? DEFAULT_EDGE_COLOR,
+      }));
 
     setGraphData({ nodes, links });
-  }, [graph, appSelectedNode, effectiveHighlightedNodeIds, effectiveBlastRadiusNodeIds]);
+  }, [
+    graph,
+    appSelectedNode,
+    highlightedNodeIds,
+    blastRadiusNodeIds,
+    aiCitationHighlightedNodeIds,
+    aiToolHighlightedNodeIds,
+    isAIHighlightsEnabled,
+    visibleLabels,    // T007
+    visibleEdgeTypes, // T007
+  ]);
 
   // Stable callback — reads only from node data, no external deps needed
   const nodeThreeObject = useCallback((node: unknown) => buildNodeObject(node as GraphNode), []);
@@ -240,7 +268,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((_, ref) => {
         enableNodeDrag={false}
         linkOpacity={0.6}
         linkWidth={1.0}
-        warmupTicks={30}
+        warmupTicks={warmupTicks}
         linkDirectionalParticles={2}
         linkDirectionalParticleWidth={1.5}
         linkDirectionalParticleSpeed={0.005}
@@ -327,9 +355,18 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((_, ref) => {
             <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: SELECTED_COLOR }} />
             <span className="text-xs text-white/60">Selected</span>
           </div>
+          {/* T002: distinct legend entries for each AI highlight type */}
+          <div className="flex items-center gap-2">
+            <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: CITATION_COLOR }} />
+            <span className="text-xs text-white/60">AI Citation</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: TOOL_COLOR }} />
+            <span className="text-xs text-white/60">AI Tool</span>
+          </div>
           <div className="flex items-center gap-2">
             <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: HIGHLIGHT_COLOR }} />
-            <span className="text-xs text-white/60">AI Highlight</span>
+            <span className="text-xs text-white/60">Query Match</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-2.5 h-2.5 rounded-full flex-shrink-0 animate-pulse" style={{ backgroundColor: BLAST_COLOR }} />
