@@ -22,6 +22,8 @@ import { hybridSearch } from '../core/search/hybrid-search.js';
 // at server startup — crashes on unsupported Node ABI versions (#89)
 import { LocalBackend } from '../mcp/local/local-backend.js';
 import { mountMCPEndpoints } from './mcp-http.js';
+import { signToken } from './auth.js';
+import { authenticateOptional } from './middleware/authenticate.js';
 
 /**
  * Determine whether an HTTP Origin header value is allowed by CORS policy.
@@ -201,8 +203,20 @@ export const createServer = async (port: number, host: string = '127.0.0.1') => 
     return repos[0]; // default to first
   };
 
+  // ── Token issuance (dev/local) ──────────────────────────────────────────────
+  // In production, replace with proper identity provider integration.
+  app.post('/api/token', (req, res) => {
+    const { apiKey } = req.body as { apiKey?: string };
+    if (!apiKey || apiKey !== process.env.GITNEXUS_API_KEY) {
+      res.status(401).json({ error: 'Invalid API key' });
+      return;
+    }
+    const token = signToken('api-client', 'analyst');
+    res.json({ token, expiresIn: process.env.GITNEXUS_TOKEN_TTL ?? '24h' });
+  });
+
   // List all registered repos
-  app.get('/api/repos', async (_req, res) => {
+  app.get('/api/repos', authenticateOptional, async (_req, res) => {
     try {
       const repos = await listRegisteredRepos();
       res.json(repos.map(r => ({
@@ -215,7 +229,7 @@ export const createServer = async (port: number, host: string = '127.0.0.1') => 
   });
 
   // Get repo info
-  app.get('/api/repo', async (req, res) => {
+  app.get('/api/repo', authenticateOptional, async (req, res) => {
     try {
       const entry = await resolveRepo(requestedRepo(req));
       if (!entry) {
@@ -235,7 +249,7 @@ export const createServer = async (port: number, host: string = '127.0.0.1') => 
   });
 
   // Get full graph
-  app.get('/api/graph', async (req, res) => {
+  app.get('/api/graph', authenticateOptional, async (req, res) => {
     try {
       const entry = await resolveRepo(requestedRepo(req));
       if (!entry) {
@@ -251,7 +265,7 @@ export const createServer = async (port: number, host: string = '127.0.0.1') => 
   });
 
   // Execute Cypher query
-  app.post('/api/query', async (req, res) => {
+  app.post('/api/query', authenticateOptional, async (req, res) => {
     try {
       const cypher = req.body.cypher as string;
       if (!cypher) {
@@ -273,7 +287,7 @@ export const createServer = async (port: number, host: string = '127.0.0.1') => 
   });
 
   // Search
-  app.post('/api/search', async (req, res) => {
+  app.post('/api/search', authenticateOptional, async (req, res) => {
     try {
       const query = (req.body.query ?? '').trim();
       if (!query) {
@@ -308,7 +322,7 @@ export const createServer = async (port: number, host: string = '127.0.0.1') => 
   });
 
   // Read file — with path traversal guard
-  app.get('/api/file', async (req, res) => {
+  app.get('/api/file', authenticateOptional, async (req, res) => {
     try {
       const entry = await resolveRepo(requestedRepo(req));
       if (!entry) {
@@ -341,7 +355,7 @@ export const createServer = async (port: number, host: string = '127.0.0.1') => 
   });
 
   // List all processes
-  app.get('/api/processes', async (req, res) => {
+  app.get('/api/processes', authenticateOptional, async (req, res) => {
     try {
       const result = await backend.queryProcesses(requestedRepo(req));
       res.json(result);
@@ -351,7 +365,7 @@ export const createServer = async (port: number, host: string = '127.0.0.1') => 
   });
 
   // Process detail
-  app.get('/api/process', async (req, res) => {
+  app.get('/api/process', authenticateOptional, async (req, res) => {
     try {
       const name = String(req.query.name ?? '').trim();
       if (!name) {
@@ -371,7 +385,7 @@ export const createServer = async (port: number, host: string = '127.0.0.1') => 
   });
 
   // List all clusters
-  app.get('/api/clusters', async (req, res) => {
+  app.get('/api/clusters', authenticateOptional, async (req, res) => {
     try {
       const result = await backend.queryClusters(requestedRepo(req));
       res.json(result);
@@ -381,7 +395,7 @@ export const createServer = async (port: number, host: string = '127.0.0.1') => 
   });
 
   // Cluster detail
-  app.get('/api/cluster', async (req, res) => {
+  app.get('/api/cluster', authenticateOptional, async (req, res) => {
     try {
       const name = String(req.query.name ?? '').trim();
       if (!name) {

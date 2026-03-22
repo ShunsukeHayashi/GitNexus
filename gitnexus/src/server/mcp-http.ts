@@ -15,6 +15,7 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { createMCPServer } from '../mcp/server.js';
 import type { LocalBackend } from '../mcp/local/local-backend.js';
 import { randomUUID } from 'crypto';
+import { extractBearer, verifyToken } from './auth.js';
 
 interface MCPSession {
   server: Server;
@@ -45,6 +46,13 @@ export function mountMCPEndpoints(app: Express, backend: LocalBackend): () => Pr
   }
 
   const handleMcpRequest = async (req: Request, res: Response) => {
+    // Optional JWT validation for MCP connections
+    const token = extractBearer(req.headers.authorization as string | undefined);
+    if (token && !verifyToken(token)) {
+      res.status(401).json({ error: 'Invalid MCP bearer token' });
+      return;
+    }
+
     const sessionId = req.headers['mcp-session-id'] as string | undefined;
 
     if (sessionId && sessions.has(sessionId)) {
