@@ -192,6 +192,7 @@ Each edit is tagged with confidence:
     name: 'impact',
     description: `Analyze the blast radius of changing a code symbol.
 Returns affected symbols grouped by depth, plus risk assessment, affected execution flows, and affected modules.
+Includes cross-repo blast radius via CROSS_REPO_CALL edges when GITNEXUS_REMOTE_INSTANCES is configured.
 
 WHEN TO USE: Before making code changes — especially refactoring, renaming, or modifying shared code. Shows what would break.
 AFTER THIS: Review d=1 items (WILL BREAK). Use context() on high-risk symbols.
@@ -202,6 +203,10 @@ Output includes:
 - affected_processes: which execution flows break and at which step
 - affected_modules: which functional areas are hit (direct vs indirect)
 - byDepth: all affected symbols grouped by traversal depth
+- cross_repo_impact: cross-repo blast radius via CROSS_REPO_CALL edges (always present)
+  - total_remote_affected: total symbols affected across remote repos
+  - remote_instances: per-instance breakdown (instanceId, instanceUrl, repoName, affected_count)
+  - note: explanation of cross-repo traversal result
 
 Depth groups:
 - d=1: WILL BREAK (direct callers/importers)
@@ -210,7 +215,7 @@ Depth groups:
 
 TIP: Default traversal uses CALLS/IMPORTS/EXTENDS/IMPLEMENTS. For class members, include HAS_METHOD and HAS_PROPERTY in relationTypes. For field access analysis, include ACCESSES in relationTypes.
 
-EdgeType: CALLS, IMPORTS, EXTENDS, IMPLEMENTS, HAS_METHOD, HAS_PROPERTY, OVERRIDES, ACCESSES
+EdgeType: CALLS, IMPORTS, EXTENDS, IMPLEMENTS, HAS_METHOD, HAS_PROPERTY, OVERRIDES, ACCESSES, CROSS_REPO_CALL
 Confidence: 1.0 = certain, <0.8 = fuzzy match`,
     inputSchema: {
       type: 'object',
