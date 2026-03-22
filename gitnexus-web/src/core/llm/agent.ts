@@ -13,6 +13,7 @@ import { ChatAnthropic } from '@langchain/anthropic';
 import { ChatOllama } from '@langchain/ollama';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { createGraphRAGTools } from './tools';
+import { debugLog, debugError } from '../../lib/debug';
 import type {
   ProviderConfig,
   OpenAIConfig,
@@ -199,15 +200,12 @@ export const createChatModel = (config: ProviderConfig): BaseChatModel => {
     case 'openrouter': {
       const openRouterConfig = config as OpenRouterConfig;
 
-      // Debug logging
-      if (import.meta.env.DEV) {
-        console.log('🌐 OpenRouter config:', {
-          hasApiKey: !!openRouterConfig.apiKey,
-          apiKeyLength: openRouterConfig.apiKey?.length || 0,
-          model: openRouterConfig.model,
-          baseUrl: openRouterConfig.baseUrl,
-        });
-      }
+      debugLog('openrouter', 'config:', {
+        hasApiKey: !!openRouterConfig.apiKey,
+        apiKeyLength: openRouterConfig.apiKey?.length || 0,
+        model: openRouterConfig.model,
+        baseUrl: openRouterConfig.baseUrl,
+      });
 
       if (!openRouterConfig.apiKey || openRouterConfig.apiKey.trim() === '') {
         throw new Error('OpenRouter API key is required but was not provided');
@@ -301,10 +299,7 @@ export const createGraphRAGAgent = (
     ? buildDynamicSystemPrompt(BASE_SYSTEM_PROMPT, codebaseContext)
     : BASE_SYSTEM_PROMPT;
   
-  // Log the full prompt for debugging
-  if (import.meta.env.DEV) {
-    console.log('🤖 AGENT SYSTEM PROMPT:\n', systemPrompt);
-  }
+  debugLog('agent', 'SYSTEM PROMPT:\n', systemPrompt);
   
   const agent = createReactAgent({
     llm: model as any,
@@ -380,12 +375,12 @@ export async function* streamAgentResponse(
         data = event;
       }
       
-      // DEBUG: Enhanced logging
-      if (import.meta.env.DEV) {
+      // Structured stream logging
+      {
         const msgType = mode === 'messages' && data?.[0]?._getType?.() || 'n/a';
         const hasContent = mode === 'messages' && data?.[0]?.content;
         const hasToolCalls = mode === 'messages' && data?.[0]?.tool_calls?.length > 0;
-        console.log(`🔄 [${mode}] type:${msgType} content:${!!hasContent} tools:${hasToolCalls}`);
+        debugLog('stream', `[${mode}] type:${msgType} content:${!!hasContent} tools:${hasToolCalls}`);
       }
       // Handle 'messages' mode - token-by-token streaming
       if (mode === 'messages') {
@@ -526,17 +521,11 @@ export async function* streamAgentResponse(
       }
     }
     
-    // DEBUG: Stream completed normally
-    if (import.meta.env.DEV) {
-      console.log('✅ Stream completed normally, yielding done');
-    }
+    debugLog('stream', 'completed normally, yielding done');
     yield { type: 'done' };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    // DEBUG: Stream error
-    if (import.meta.env.DEV) {
-      console.error('❌ Stream error:', message, error);
-    }
+    debugError('stream', 'error:', message, error);
     yield { 
       type: 'error', 
       error: message,
