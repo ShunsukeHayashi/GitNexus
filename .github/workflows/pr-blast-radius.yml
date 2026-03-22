@@ -1,0 +1,87 @@
+name: PR Blast Radius
+
+# T021: Autonomous PR Blast Radius Commenter
+# Analyzes the knowledge graph for symbols changed in this PR and posts
+# (or updates) a sticky comment summarising the blast radius.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  blast-radius:
+    name: Blast Radius Analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      # Full history so git diff can compare BASE_SHA...HEAD_SHA correctly
+      - name: Checkout (full history)
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          fetch-depth: 0
+
+      # Install deps + build TypeScript → dist/
+      - name: Setup GitNexus
+        uses: ./.github/actions/setup-gitnexus
+        with:
+          build: 'true'
+
+      # Index the gitnexus source package so impact queries have graph data.
+      # --skip-ai-context skips CLAUDE.md/AGENTS.md generation (not needed in CI).
+      # --force ensures a clean index even if a stale one exists from cache.
+      - name: Analyze gitnexus source
+        run: node gitnexus/dist/cli/index.js analyze gitnexus --force --skip-ai-context
+        timeout-minutes: 12
+
+      # Run the blast radius script and write /tmp/blast-radius-body.md
+      - name: Generate blast radius report
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          GITHUB_SERVER_URL: ${{ github.server_url }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+        run: node .github/scripts/blast-radius-comment.mjs
+
+      # Post or update the sticky PR comment (marker: <!-- blast-radius-report -->)
+      - name: Post or update PR comment
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('/tmp/blast-radius-body.md', 'utf8');
+            const prNumber = context.payload.pull_request.number;
+            const marker = '<!-- blast-radius-report -->';
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              issue_number: prNumber,
+              per_page: 100,
+            });
+
+            const existing = comments.find(c => c.body?.includes(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner:      context.repo.owner,
+                repo:       context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+              core.info(`Updated blast-radius comment ${existing.id} on PR #${prNumber}`);
+            } else {
+              const { data: created } = await github.rest.issues.createComment({
+                owner:        context.repo.owner,
+                repo:         context.repo.repo,
+                issue_number: prNumber,
+                body,
+              });
+              core.info(`Created blast-radius comment ${created.id} on PR #${prNumber}`);
+            }
