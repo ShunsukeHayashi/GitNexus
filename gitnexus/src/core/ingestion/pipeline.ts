@@ -7,6 +7,7 @@ import {
   processImportsFromExtracted,
   buildImportResolutionContext
 } from './import-processor.js';
+import { FileHashCache } from '../../storage/file-hash-cache.js';
 import { EMPTY_INDEX } from './resolvers/index.js';
 import { processCalls, processCallsFromExtracted, processAssignmentsFromExtracted, processRoutesFromExtracted, seedCrossFileReceiverTypes, buildImportedReturnTypes, buildImportedRawReturnTypes, type ExportedTypeMap, buildExportedTypeMapFromGraph } from './call-processor.js';
 import { processHeritage, processHeritageFromExtracted } from './heritage-processor.js';
@@ -350,6 +351,17 @@ async function runCrossFileBindingPropagation(
 export interface PipelineOptions {
   /** Skip MRO, community detection, and process extraction for faster test runs. */
   skipGraphPhases?: boolean;
+  /**
+   * When true, bypass the file-hash cache and re-parse every file regardless
+   * of whether its content has changed.  Equivalent to `gitnexus analyze --force`.
+   */
+  force?: boolean;
+  /**
+   * Absolute path to the repository root used to locate the hash cache.
+   * Defaults to the `repoPath` argument of `runPipelineFromRepo`.
+   * Set explicitly only when the .gitnexus storage dir lives elsewhere.
+   */
+  hashCacheRoot?: string;
 }
 
 export const runPipelineFromRepo = async (
@@ -450,7 +462,38 @@ export const runPipelineFromRepo = async (
       console.warn(`Skipping ${count} ${lang} file(s) — ${lang} parser not available (native binding may not have built). Try: npm rebuild tree-sitter-${lang}`);
     }
 
-    const totalParseable = parseableScanned.length;
+    // ── Phase 3.5: File-hash cache — skip unchanged files ──────────────
+    // When force is false (default), filter parseableScanned down to only
+    // files whose content has actually changed since the last run.
+    // The cache is flushed after the full chunk-parse loop below.
+    let hashCache: FileHashCache | undefined;
+    let parseableFiltered = parseableScanned;
+
+    if (!options?.force) {
+      const cacheRoot = options?.hashCacheRoot ?? repoPath;
+      hashCache = new FileHashCache(cacheRoot);
+      try {
+        const changedRelPaths = new Set(
+          await hashCache.filterChanged(repoPath, parseableScanned),
+        );
+        const totalScanned = parseableScanned.length;
+        const totalChanged = changedRelPaths.size;
+        parseableFiltered = parseableScanned.filter(f => changedRelPaths.has(f.path));
+        if (isDev) {
+          console.log(
+            `🔑 Hash cache: ${totalChanged}/${totalScanned} files changed` +
+            ` — skipping ${totalScanned - totalChanged} unchanged`,
+          );
+        }
+      } catch (err) {
+        // Cache I/O failure is non-fatal — fall back to full re-parse
+        if (isDev) console.warn('Hash cache unavailable, re-parsing all files:', (err as Error).message);
+        hashCache = undefined;
+        parseableFiltered = parseableScanned;
+      }
+    }
+
+    const totalParseable = parseableFiltered.length;
 
     if (totalParseable === 0) {
       onProgress({
@@ -461,11 +504,11 @@ export const runPipelineFromRepo = async (
       });
     }
 
-    // Build byte-budget chunks
+    // Build byte-budget chunks (from hash-filtered set)
     const chunks: string[][] = [];
     let currentChunk: string[] = [];
     let currentBytes = 0;
-    for (const file of parseableScanned) {
+    for (const file of parseableFiltered) {
       if (currentChunk.length > 0 && currentBytes + file.size > CHUNK_BYTE_BUDGET) {
         chunks.push(currentChunk);
         currentChunk = [];
@@ -479,8 +522,8 @@ export const runPipelineFromRepo = async (
     const numChunks = chunks.length;
 
     if (isDev) {
-      const totalMB = parseableScanned.reduce((s, f) => s + f.size, 0) / (1024 * 1024);
-      console.log(`📂 Scan: ${totalFiles} paths, ${totalParseable} parseable (${totalMB.toFixed(0)}MB), ${numChunks} chunks @ ${CHUNK_BYTE_BUDGET / (1024 * 1024)}MB budget`);
+      const totalMB = parseableFiltered.reduce((s, f) => s + f.size, 0) / (1024 * 1024);
+      console.log(`📂 Scan: ${totalFiles} paths, ${totalParseable} to parse (${totalMB.toFixed(0)}MB), ${numChunks} chunks @ ${CHUNK_BYTE_BUDGET / (1024 * 1024)}MB budget`);
     }
 
     onProgress({
@@ -493,7 +536,7 @@ export const runPipelineFromRepo = async (
     // Don't spawn workers for tiny repos — overhead exceeds benefit
     const MIN_FILES_FOR_WORKERS = 15;
     const MIN_BYTES_FOR_WORKERS = 512 * 1024;
-    const totalBytes = parseableScanned.reduce((s, f) => s + f.size, 0);
+    const totalBytes = parseableFiltered.reduce((s, f) => s + f.size, 0);
 
     // Create worker pool once, reuse across chunks
     let workerPool: WorkerPool | undefined;
@@ -872,6 +915,16 @@ export const runPipelineFromRepo = async (
     });
 
     astCache.clear();
+
+    // ── Flush hash cache (persist updated entries) ────────────────────
+    if (hashCache) {
+      try {
+        await hashCache.flush();
+      } catch (err) {
+        // Non-fatal — next run will just re-compute the missing entries
+        if (isDev) console.warn('Hash cache flush failed:', (err as Error).message);
+      }
+    }
 
     return { graph, repoPath, totalFileCount: totalFiles, communityResult, processResult };
   } catch (error) {
