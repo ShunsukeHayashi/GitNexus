@@ -18,6 +18,7 @@ import {
   cleanupOldKuzuFiles,
   type RegistryEntry,
 } from '../../storage/repo-manager.js';
+import { ProjectMemoryStore, type MemoryEntry } from '../../storage/project-memory.js';
 import { TestGenerator } from './test-generator.js';
 // AI context generation is CLI-only (gitnexus analyze)
 // import { generateAIContextFiles } from '../../cli/ai-context.js';
@@ -400,6 +401,12 @@ export class LocalBackend {
         return this.detectChanges(repo, params);
       case 'rename':
         return this.rename(repo, params);
+      case 'memory_add':
+        return this.memoryAdd(repo.repoPath, params);
+      case 'memory_search':
+        return this.memorySearch(repo.repoPath, params);
+      case 'memory_list':
+        return this.memoryList(repo.repoPath, params);
       // Legacy aliases for backwards compatibility
       case 'search':
         return this.query(repo, params);
@@ -1770,8 +1777,12 @@ export class LocalBackend {
     };
   }
 
-  // ─── suggest_tests tool ──────────────────────────────────────────────────────
+  // ─── suggest_tests tool ──────────────────────────────────────────
 
+  /**
+   * Suggest unit test skeletons for a symbol and its blast radius.
+   * Runs impact analysis internally and proposes Vitest tests for uncovered nodes.
+   */
   private async suggestTests(repo: RepoHandle, params: {
     symbol: string;
     repo?: string;
@@ -1781,7 +1792,7 @@ export class LocalBackend {
       return { error: 'symbol parameter is required and cannot be empty.' };
     }
 
-    // Run impact analysis internally (upstream, depth 2)
+    // Run impact analysis to get the blast radius
     const impactResult = await this.impact(repo, {
       target: symbol,
       direction: 'upstream',
@@ -1791,6 +1802,69 @@ export class LocalBackend {
     // Generate test proposals using the TestGenerator
     const generator = new TestGenerator();
     return generator.suggestTests(symbol, impactResult as Record<string, unknown>, repo.repoPath);
+  }
+
+  // ─── ProjectMemory Tool Implementations ─────────────────────────
+
+  /**
+   * memory_add — persist a note, decision, insight, or context entry.
+   */
+  private async memoryAdd(repoPath: string, params: {
+    content?: string;
+    type?: MemoryEntry['type'];
+    tags?: string[];
+    sessionId?: string;
+  }): Promise<string> {
+    if (!params.content?.trim()) {
+      return 'Error: content is required and cannot be empty.';
+    }
+    const store = new ProjectMemoryStore(repoPath);
+    const entry = await store.add({
+      type: params.type ?? 'context',
+      content: params.content.trim(),
+      tags: params.tags ?? [],
+      repoId: repoPath,
+      sessionId: params.sessionId,
+    });
+    return `Saved memory entry (id: ${entry.id}, type: ${entry.type})`;
+  }
+
+  /**
+   * memory_search — keyword search over stored memory entries.
+   */
+  private async memorySearch(repoPath: string, params: {
+    query?: string;
+    type?: MemoryEntry['type'];
+    limit?: number;
+  }): Promise<string> {
+    if (!params.query?.trim()) {
+      return 'Error: query is required and cannot be empty.';
+    }
+    const store = new ProjectMemoryStore(repoPath);
+    const results = await store.search(
+      params.query.trim(),
+      params.type,
+      params.limit,
+    );
+    if (results.length === 0) {
+      return `No memory entries found for query: "${params.query}"`;
+    }
+    return JSON.stringify(results, null, 2);
+  }
+
+  /**
+   * memory_list — list recent memory entries, optionally filtered by type.
+   */
+  private async memoryList(repoPath: string, params: {
+    limit?: number;
+    type?: MemoryEntry['type'];
+  }): Promise<string> {
+    const store = new ProjectMemoryStore(repoPath);
+    const results = await store.list(params.limit, params.type);
+    if (results.length === 0) {
+      return 'No memory entries found.';
+    }
+    return JSON.stringify(results, null, 2);
   }
 
   async disconnect(): Promise<void> {
