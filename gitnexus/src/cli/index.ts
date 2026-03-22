@@ -27,6 +27,7 @@ program
   .description('Index a repository (full analysis)')
   .option('-f, --force', 'Force full re-index even if up to date')
   .option('--embeddings', 'Enable embedding generation for semantic search (off by default)')
+  .option('--skip-embedding-limit', 'Override the 50 000-node safety cap for embedding generation (use with caution on large repos)')
   .option('--skills', 'Generate repo-specific skill files from detected communities')
   .option('--skip-git', 'Index a folder without requiring a .git directory')
    .option('-v, --verbose', 'Enable verbose ingestion warnings (default: false)')
