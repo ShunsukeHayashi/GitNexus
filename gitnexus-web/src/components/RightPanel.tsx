@@ -13,6 +13,7 @@ export const RightPanel = () => {
     isRightPanelOpen,
     setRightPanelOpen,
     fileContents,
+    setFileContents,
     graph,
     addCodeReference,
     // LLM / chat state
@@ -60,6 +61,27 @@ export const RightPanel = () => {
     }
     return best?.path ?? null;
   }, [fileContents]);
+
+  // T008: Accept a suggest-tool diff proposal — patches the in-memory fileContents
+  const handleSuggestAccept = useCallback((
+    filePath: string,
+    startLine: number,
+    endLine: number,
+    replacement: string,
+  ) => {
+    const resolvedPath = resolveFilePathForUI(filePath) ?? filePath;
+    const current = fileContents.get(resolvedPath) ?? '';
+    const lines = current.split('\n');
+    // startLine / endLine are 1-indexed (from the suggest tool schema)
+    const patched = [
+      ...lines.slice(0, startLine - 1),
+      ...replacement.split('\n'),
+      ...lines.slice(endLine),
+    ].join('\n');
+    const next = new Map(fileContents);
+    next.set(resolvedPath, patched);
+    setFileContents(next);
+  }, [fileContents, resolveFilePathForUI, setFileContents]);
 
   const findFileNodeIdForUI = useCallback((filePath: string): string | undefined => {
     if (!graph) return undefined;
@@ -357,7 +379,11 @@ export const RightPanel = () => {
                                   )}
                                   {step.type === 'tool_call' && step.toolCall && (
                                     <div className="mb-3">
-                                      <ToolCallCard toolCall={step.toolCall} defaultExpanded={false} />
+                                      <ToolCallCard
+                                        toolCall={step.toolCall}
+                                        defaultExpanded={false}
+                                        onSuggestAccept={handleSuggestAccept}
+                                      />
                                     </div>
                                   )}
                                   {step.type === 'content' && step.content && (
