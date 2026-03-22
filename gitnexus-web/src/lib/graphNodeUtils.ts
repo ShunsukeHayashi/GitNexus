@@ -19,6 +19,7 @@ export interface GraphNode {
   glow: boolean;
   /** Animation type from triggerNodeAnimation; independent of the static glow flag */
   animationType?: AnimationType;
+  activeAgents?: ActiveAgentMarker[];
   raw: any;
   x?: number;
   y?: number;
@@ -29,6 +30,13 @@ export interface GraphLink {
   source: string;
   target: string;
   color: string;
+}
+
+export interface ActiveAgentMarker {
+  agentId: string;
+  status: 'reading' | 'writing';
+  avatar?: string;
+  displayName?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -71,6 +79,7 @@ export const TOOL_COLOR      = '#a855f7';  // Purple — AI tool result
 export const HIGHLIGHT_COLOR = '#38bdf8';  // Sky    — manual query highlight
 export const BLAST_COLOR     = '#ef4444';
 export const SELECTED_COLOR  = '#f59e0b';
+export const ACTIVE_AGENT_COLOR = '#fbbf24';
 
 // ---------------------------------------------------------------------------
 // T004: module-level geometry / material caches
@@ -82,6 +91,7 @@ const _geoCache     = new Map<string, THREE.SphereGeometry>();
 const _matCache     = new Map<string, THREE.MeshPhongMaterial>();
 const _haloGeoCache = new Map<string, THREE.SphereGeometry>();
 const _haloMatCache = new Map<string, THREE.MeshBasicMaterial>();
+const _spriteMatCache = new Map<string, THREE.SpriteMaterial>();
 
 function _cachedSphereGeo(radius: number, w: number, h: number): THREE.SphereGeometry {
   const k = `${radius.toFixed(4)}:${w}:${h}`;
@@ -119,6 +129,42 @@ function _cachedHaloMat(color: THREE.Color, opacity: number): THREE.MeshBasicMat
   return _haloMatCache.get(k)!;
 }
 
+function _cachedAgentSpriteMat(label: string, color: string): THREE.SpriteMaterial {
+  const key = `${label}:${color}`;
+  if (!_spriteMatCache.has(key)) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 96;
+    canvas.height = 96;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      return new THREE.SpriteMaterial({ color: new THREE.Color(color) });
+    }
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+    ctx.beginPath();
+    ctx.arc(48, 48, 42, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = color;
+    ctx.beginPath();
+    ctx.arc(48, 48, 42, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.fillStyle = '#f8fafc';
+    ctx.font = 'bold 30px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label.slice(0, 2).toUpperCase(), 48, 50);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+    _spriteMatCache.set(key, new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false }));
+  }
+  return _spriteMatCache.get(key)!;
+}
+
 // ---------------------------------------------------------------------------
 // buildNodeObject — MeshPhong sphere + optional glow halo
 // Reuses cached geometries/materials (T004) to minimise GPU allocations per frame.
@@ -129,6 +175,7 @@ export function buildNodeObject(node: GraphNode): THREE.Group {
   const size  = Math.cbrt(node.val) * 2;
   const color = new THREE.Color(node.color);
   const group = new THREE.Group();
+  const activeAgents = node.activeAgents ?? [];
 
   // Emissive scalar per state
   let emissiveScalar = 0;
@@ -164,6 +211,28 @@ export function buildNodeObject(node: GraphNode): THREE.Group {
       _haloGeoCache.get(haloGeoKey)!,
       _cachedHaloMat(color, haloOpacity),
     ));
+  }
+
+  if (activeAgents.length > 0) {
+    const auraColor = new THREE.Color(ACTIVE_AGENT_COLOR);
+    const auraRadius = size * 3.35;
+    const auraKey = `${auraRadius.toFixed(4)}:16:10`;
+    if (!_haloGeoCache.has(auraKey)) {
+      _haloGeoCache.set(auraKey, new THREE.SphereGeometry(auraRadius, 16, 10));
+    }
+    group.add(new THREE.Mesh(
+      _haloGeoCache.get(auraKey)!,
+      _cachedHaloMat(auraColor, 0.2),
+    ));
+
+    activeAgents.slice(0, 2).forEach((agent, index) => {
+      const label = (agent.avatar || agent.displayName || agent.agentId).slice(0, 2);
+      const badgeColor = agent.status === 'writing' ? ACTIVE_AGENT_COLOR : '#60a5fa';
+      const sprite = new THREE.Sprite(_cachedAgentSpriteMat(label, badgeColor));
+      sprite.scale.set(size * 1.55, size * 1.55, 1);
+      sprite.position.set(0, size * (2.1 + index * 1.15), 0);
+      group.add(sprite);
+    });
   }
 
   return group;

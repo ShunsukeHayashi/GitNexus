@@ -34,6 +34,24 @@ export interface ConnectToServerResult {
   repoInfo: ServerRepoInfo;
 }
 
+export type ActiveAgentStatus = 'reading' | 'writing';
+
+export interface ActiveAgentWork {
+  agentId: string;
+  nodeId?: string;
+  filePath?: string;
+  status: ActiveAgentStatus;
+  avatar?: string;
+  displayName?: string;
+  updatedAt?: string;
+}
+
+export interface ActiveAgentSummary {
+  total: number;
+  reading: number;
+  writing: number;
+}
+
 export function normalizeServerUrl(input: string): string {
   let url = input.trim();
 
@@ -116,6 +134,29 @@ export async function fetchGraph(
 
   const text = new TextDecoder().decode(combined);
   return JSON.parse(text);
+}
+
+export async function fetchActiveAgents(
+  baseUrl: string,
+  repoName?: string,
+  signal?: AbortSignal
+): Promise<{ agents: ActiveAgentWork[]; summary: ActiveAgentSummary }> {
+  const url = repoName
+    ? `${baseUrl}/active-agents?repo=${encodeURIComponent(repoName)}`
+    : `${baseUrl}/active-agents`;
+  const response = await fetch(url, { signal });
+  if (!response.ok) {
+    throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+  }
+  const data = await response.json();
+  return {
+    agents: Array.isArray(data?.agents) ? data.agents : [],
+    summary: {
+      total: Number(data?.summary?.total ?? 0),
+      reading: Number(data?.summary?.reading ?? 0),
+      writing: Number(data?.summary?.writing ?? 0),
+    },
+  };
 }
 
 export function extractFileContents(nodes: GraphNode[]): Record<string, string> {

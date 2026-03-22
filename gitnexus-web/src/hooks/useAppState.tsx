@@ -11,8 +11,13 @@ import type { LLMSettings, ProviderConfig, AgentStreamChunk, ChatMessage, ToolCa
 import { loadSettings, getActiveProviderConfig, saveSettings } from '../core/llm/settings-service';
 import type { AgentMessage } from '../core/llm/agent';
 import { DEFAULT_VISIBLE_EDGES, type EdgeType } from '../lib/constants';
-import type { RepoSummary, ConnectToServerResult } from '../services/server-connection';
-import { fetchRepos, connectToServer } from '../services/server-connection';
+import type {
+  RepoSummary,
+  ConnectToServerResult,
+  ActiveAgentWork,
+  ActiveAgentSummary,
+} from '../services/server-connection';
+import { fetchRepos, connectToServer, fetchActiveAgents } from '../services/server-connection';
 
 export type ViewMode = 'onboarding' | 'loading' | 'exploring';
 export type RightPanelTab = 'code' | 'chat';
@@ -51,6 +56,12 @@ export interface CodeReferenceFocus {
   endLine?: number;
   ts: number;
 }
+
+const EMPTY_ACTIVE_AGENT_SUMMARY: ActiveAgentSummary = {
+  total: 0,
+  reading: 0,
+  writing: 0,
+};
 
 interface AppState {
   // View state
@@ -119,6 +130,8 @@ interface AppState {
   availableRepos: RepoSummary[];
   setAvailableRepos: (repos: RepoSummary[]) => void;
   switchRepo: (repoName: string) => Promise<void>;
+  activeAgents: ActiveAgentWork[];
+  activeAgentSummary: ActiveAgentSummary;
 
   // Worker API (shared across app)
   runPipeline: (file: File, onProgress: (p: PipelineProgress) => void, clusteringConfig?: ProviderConfig) => Promise<PipelineResult>;
@@ -283,6 +296,8 @@ export const AppStateProvider = ({ children }: { children: ReactNode }) => {
   // Multi-repo switching
   const [serverBaseUrl, setServerBaseUrl] = useState<string | null>(null);
   const [availableRepos, setAvailableRepos] = useState<RepoSummary[]>([]);
+  const [activeAgents, setActiveAgents] = useState<ActiveAgentWork[]>([]);
+  const [activeAgentSummary, setActiveAgentSummary] = useState<ActiveAgentSummary>(EMPTY_ACTIVE_AGENT_SUMMARY);
 
   // Embedding state
   const [embeddingStatus, setEmbeddingStatus] = useState<EmbeddingStatus>('idle');
@@ -353,6 +368,54 @@ export const AppStateProvider = ({ children }: { children: ReactNode }) => {
     );
     return fileNode?.id;
   }, [graph, normalizePath]);
+
+  useEffect(() => {
+    if (!serverBaseUrl || viewMode !== 'exploring') {
+      setActiveAgents([]);
+      setActiveAgentSummary(EMPTY_ACTIVE_AGENT_SUMMARY);
+      return;
+    }
+
+    let disposed = false;
+    let currentController: AbortController | null = null;
+
+    const refreshActiveAgents = async () => {
+      currentController?.abort();
+      currentController = new AbortController();
+      try {
+        const { agents, summary } = await fetchActiveAgents(
+          serverBaseUrl,
+          projectName || undefined,
+          currentController.signal,
+        );
+        if (disposed) return;
+
+        const hydratedAgents = agents.map(agent => ({
+          ...agent,
+          nodeId: agent.nodeId ?? (agent.filePath ? findFileNodeId(agent.filePath) : undefined),
+        }));
+
+        setActiveAgents(hydratedAgents);
+        setActiveAgentSummary(summary);
+      } catch (error) {
+        if ((error as Error).name === 'AbortError' || disposed) return;
+        console.warn('Active agent refresh failed:', error);
+        setActiveAgents([]);
+        setActiveAgentSummary(EMPTY_ACTIVE_AGENT_SUMMARY);
+      }
+    };
+
+    void refreshActiveAgents();
+    const intervalId = window.setInterval(() => {
+      void refreshActiveAgents();
+    }, 4000);
+
+    return () => {
+      disposed = true;
+      currentController?.abort();
+      window.clearInterval(intervalId);
+    };
+  }, [serverBaseUrl, viewMode, projectName, findFileNodeId]);
 
   // Code References methods
   const addCodeReference = useCallback((ref: Omit<CodeReference, 'id'>) => {
@@ -1000,6 +1063,8 @@ export const AppStateProvider = ({ children }: { children: ReactNode }) => {
     setCodeReferences([]);
     setCodePanelOpen(false);
     setCodeReferenceFocus(null);
+    setActiveAgents([]);
+    setActiveAgentSummary(EMPTY_ACTIVE_AGENT_SUMMARY);
 
     try {
       const result: ConnectToServerResult = await connectToServer(serverBaseUrl, (phase, downloaded, total) => {
@@ -1157,6 +1222,8 @@ export const AppStateProvider = ({ children }: { children: ReactNode }) => {
     availableRepos,
     setAvailableRepos,
     switchRepo,
+    activeAgents,
+    activeAgentSummary,
     runPipeline,
     runPipelineFromFiles,
     runQuery,
@@ -1214,4 +1281,3 @@ export const useAppState = (): AppState => {
   }
   return context;
 };
-

@@ -20,6 +20,8 @@ import {
   TOOL_COLOR,
   HIGHLIGHT_COLOR,
   BLAST_COLOR,
+  ACTIVE_AGENT_COLOR,
+  type ActiveAgentMarker,
 } from '../lib/graphNodeUtils';
 
 // Minimal shape of the selected node needed by this UI layer.
@@ -30,6 +32,7 @@ interface OverlayNode {
 
 export interface GraphCanvasOverlayProps {
   selectedNode:         OverlayNode | null;
+  activeAgents:         Array<ActiveAgentMarker & { nodeId?: string; filePath?: string }>;
   onClearSelection:     () => void;
   isAIHighlightsEnabled: boolean;
   onToggleAIHighlights: () => void;
@@ -40,6 +43,7 @@ export interface GraphCanvasOverlayProps {
 
 export function GraphCanvasOverlay({
   selectedNode,
+  activeAgents,
   onClearSelection,
   isAIHighlightsEnabled,
   onToggleAIHighlights,
@@ -98,7 +102,7 @@ export function GraphCanvasOverlay({
       </div>
 
       {/* AI Highlights toggle — Top Right */}
-      <div className="absolute top-4 right-4 z-20">
+      <div className="absolute top-4 right-4 z-20 flex flex-col gap-3 items-end">
         <button
           onClick={onToggleAIHighlights}
           className={
@@ -113,6 +117,39 @@ export function GraphCanvasOverlay({
             : <LightbulbOff className="w-4 h-4" />
           }
         </button>
+
+        {activeAgents.length > 0 && (
+          <div className="min-w-60 max-w-72 p-3 bg-black/70 border border-white/10 rounded-xl backdrop-blur-md">
+            <p className="text-xs font-semibold text-white/50 mb-2 uppercase tracking-wider">
+              AI Swarm
+            </p>
+            <div className="flex flex-col gap-2">
+              {activeAgents.slice(0, 4).map(agent => (
+                <div key={`${agent.agentId}-${agent.nodeId ?? agent.filePath ?? 'unknown'}`} className="flex items-start gap-2">
+                  <div
+                    className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-semibold text-slate-950"
+                    style={{ backgroundColor: agent.status === 'writing' ? ACTIVE_AGENT_COLOR : '#60a5fa' }}
+                  >
+                    {(agent.avatar || agent.displayName || agent.agentId).slice(0, 2).toUpperCase()}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-xs text-white truncate">
+                      {agent.displayName || agent.agentId}
+                    </div>
+                    <div className="text-[11px] text-white/45 truncate">
+                      {agent.status} {agent.filePath ? `• ${agent.filePath}` : agent.nodeId ? `• ${agent.nodeId}` : ''}
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {activeAgents.length > 4 && (
+                <div className="text-[11px] text-white/45">
+                  +{activeAgents.length - 4} more active agents
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Node colour legend — Bottom Left */}
@@ -158,6 +195,10 @@ export function GraphCanvasOverlay({
               style={{ backgroundColor: BLAST_COLOR }}
             />
             <span className="text-xs text-white/60">Blast Radius</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: ACTIVE_AGENT_COLOR }} />
+            <span className="text-xs text-white/60">Active AI Agent</span>
           </div>
         </div>
       </div>

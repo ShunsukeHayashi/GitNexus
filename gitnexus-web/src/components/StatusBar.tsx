@@ -2,7 +2,7 @@ import { Heart } from 'lucide-react';
 import { useAppState } from '../hooks/useAppState';
 
 export const StatusBar = () => {
-  const { graph, progress } = useAppState();
+  const { graph, progress, activeAgentSummary } = useAppState();
 
   const nodeCount = graph?.nodes.length ?? 0;
   const edgeCount = graph?.relationships.length ?? 0;
@@ -66,6 +66,8 @@ export const StatusBar = () => {
             <span>{nodeCount} nodes</span>
             <span className="text-border-default">•</span>
             <span>{edgeCount} edges</span>
+            <span className="text-border-default">•</span>
+            <span>{activeAgentSummary.total} active agents</span>
             {primaryLanguage && (
               <>
                 <span className="text-border-default">•</span>

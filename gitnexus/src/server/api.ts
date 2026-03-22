@@ -25,6 +25,111 @@ import { mountMCPEndpoints } from './mcp-http.js';
 import { signToken } from './auth.js';
 import { authenticateOptional } from './middleware/authenticate.js';
 
+type ActiveAgentStatus = 'reading' | 'writing';
+
+interface ActiveAgentWork {
+  agentId: string;
+  nodeId?: string;
+  filePath?: string;
+  status: ActiveAgentStatus;
+  avatar?: string;
+  displayName?: string;
+  updatedAt?: string;
+}
+
+const normalizeTrackedPath = (value: string): string =>
+  value.replace(/\\/g, '/').replace(/^\.?\//, '').trim();
+
+const escapeCypherString = (value: string): string =>
+  value.replace(/\\/g, '\\\\').replace(/'/g, "''");
+
+const pickString = (...values: unknown[]): string | undefined => {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return undefined;
+};
+
+const resolveFileNodeId = async (filePath: string): Promise<string | undefined> => {
+  const normalizedPath = normalizeTrackedPath(filePath);
+  if (!normalizedPath) return undefined;
+
+  const exactRows = await executeQuery(`
+    MATCH (n:File)
+    WHERE n.filePath = '${escapeCypherString(normalizedPath)}'
+    RETURN n.id AS id
+    LIMIT 1
+  `);
+  const exactId = exactRows[0]?.id ?? exactRows[0]?.[0];
+  if (typeof exactId === 'string' && exactId) return exactId;
+
+  const suffixRows = await executeQuery(`
+    MATCH (n:File)
+    WHERE n.filePath ENDS WITH '/${escapeCypherString(normalizedPath)}'
+       OR n.filePath ENDS WITH '${escapeCypherString(normalizedPath)}'
+    RETURN n.id AS id
+    LIMIT 1
+  `);
+  const suffixId = suffixRows[0]?.id ?? suffixRows[0]?.[0];
+  return typeof suffixId === 'string' && suffixId ? suffixId : undefined;
+};
+
+const loadActiveAgents = async (storagePath: string): Promise<ActiveAgentWork[]> => {
+  try {
+    const raw = await fs.readFile(path.join(storagePath, 'active-agents.json'), 'utf-8');
+    const parsed = JSON.parse(raw) as unknown;
+    const items = Array.isArray(parsed)
+      ? parsed
+      : (parsed && typeof parsed === 'object' && Array.isArray((parsed as { agents?: unknown[] }).agents)
+          ? (parsed as { agents: unknown[] }).agents
+          : []);
+
+    const agents: ActiveAgentWork[] = [];
+    for (const item of items) {
+      if (!item || typeof item !== 'object') continue;
+
+      const record = item as Record<string, unknown>;
+      const filePath = pickString(record.filePath, record.path, record.file);
+      const normalizedFilePath = filePath ? normalizeTrackedPath(filePath) : undefined;
+      const status: ActiveAgentStatus = record.status === 'writing' ? 'writing' : 'reading';
+
+      agents.push({
+        agentId: pickString(record.agentId, record.id, record.workerId) ?? 'unknown-agent',
+        nodeId: pickString(record.nodeId),
+        filePath: normalizedFilePath,
+        status,
+        avatar: pickString(record.avatar),
+        displayName: pickString(record.displayName, record.name),
+        updatedAt: pickString(record.updatedAt, record.timestamp),
+      });
+    }
+
+    if (agents.length === 0) return [];
+
+    const lbugPath = path.join(storagePath, 'lbug');
+    try {
+      return await withLbugDb(lbugPath, async () => {
+        const hydrated = await Promise.all(
+          agents.map(async (agent) => ({
+            ...agent,
+            nodeId: agent.nodeId ?? (agent.filePath ? await resolveFileNodeId(agent.filePath) : undefined),
+          }))
+        );
+        return hydrated;
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message.toLowerCase() : String(err).toLowerCase();
+      if (message.includes('lock') || message.includes('busy')) {
+        return agents;
+      }
+      throw err;
+    }
+  } catch (err: any) {
+    if (err?.code === 'ENOENT') return [];
+    throw err;
+  }
+};
+
 /**
  * Determine whether an HTTP Origin header value is allowed by CORS policy.
  *
@@ -261,6 +366,29 @@ export const createServer = async (port: number, host: string = '127.0.0.1') => 
       res.json(graph);
     } catch (err: any) {
       res.status(500).json({ error: err.message || 'Failed to build graph' });
+    }
+  });
+
+  // Active AI workers / cursors for graph overlays
+  app.get('/api/active-agents', authenticateOptional, async (req, res) => {
+    try {
+      const entry = await resolveRepo(requestedRepo(req));
+      if (!entry) {
+        res.status(404).json({ error: 'Repository not found' });
+        return;
+      }
+
+      const agents = await loadActiveAgents(entry.storagePath);
+      res.json({
+        agents,
+        summary: {
+          total: agents.length,
+          reading: agents.filter(agent => agent.status === 'reading').length,
+          writing: agents.filter(agent => agent.status === 'writing').length,
+        },
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to load active agents' });
     }
   });
 

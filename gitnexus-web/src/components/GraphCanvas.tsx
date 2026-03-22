@@ -33,6 +33,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((_, ref) => {
     visibleLabels,
     visibleEdgeTypes,
     animatedNodes,
+    activeAgents,
   } = useAppState();
 
   const fgRef = useRef<ForceGraphMethods | undefined>(undefined);
@@ -45,6 +46,17 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((_, ref) => {
     () => Math.min(50, Math.max(10, Math.ceil((graph?.nodes.length ?? 0) / 20))),
     [graph?.nodes.length],
   );
+
+  const activeAgentsByNodeId = useMemo(() => {
+    const mapping = new Map<string, typeof activeAgents>();
+    for (const agent of activeAgents) {
+      if (!agent.nodeId) continue;
+      const existing = mapping.get(agent.nodeId) ?? [];
+      existing.push(agent);
+      mapping.set(agent.nodeId, existing);
+    }
+    return mapping;
+  }, [activeAgents]);
 
   useEffect(() => {
     if (!graph) return;
@@ -61,6 +73,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((_, ref) => {
         const isCitation = isAIHighlightsEnabled && aiCitationHighlightedNodeIds.has(n.id);
         const isTool     = isAIHighlightsEnabled && aiToolHighlightedNodeIds.has(n.id);
         const isHighlit  = highlightedNodeIds.has(n.id);
+        const nodeAgents = activeAgentsByNodeId.get(n.id) ?? [];
 
         const nodeColor = isBlast    ? BLAST_COLOR
                         : isSelected ? SELECTED_COLOR
@@ -78,8 +91,9 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((_, ref) => {
               : n.label === 'Folder'    ? 10 : n.label === 'File'      ? 7  : n.label === 'Class'     ? 9
               : n.label === 'Interface' ? 8  : n.label === 'Function'  ? 4  : n.label === 'Method'    ? 3  : 2,
           color: nodeColor,
-          glow:  isBlast || isSelected || isCitation || isTool || isHighlit,
+          glow:  isBlast || isSelected || isCitation || isTool || isHighlit || nodeAgents.length > 0,
           animationType,
+          activeAgents: nodeAgents,
           raw:   n,
         };
       });
@@ -104,6 +118,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((_, ref) => {
     visibleLabels,
     visibleEdgeTypes,
     animatedNodes,
+    activeAgentsByNodeId,
   ]);
 
   const nodeThreeObject = useCallback((node: unknown) => buildNodeObject(node as GraphNode), []);
@@ -184,6 +199,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((_, ref) => {
 
       <GraphCanvasOverlay
         selectedNode={appSelectedNode}
+        activeAgents={activeAgents}
         onClearSelection={handleClearSelection}
         isAIHighlightsEnabled={isAIHighlightsEnabled}
         onToggleAIHighlights={handleToggleAIHighlights}
