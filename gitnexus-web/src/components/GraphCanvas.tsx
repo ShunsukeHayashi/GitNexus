@@ -3,6 +3,7 @@ import {
   forwardRef, useImperativeHandle, useRef,
 } from 'react';
 import ForceGraph3D, { ForceGraphMethods } from 'react-force-graph-3d';
+import * as THREE from 'three';
 import { useAppState } from '../hooks/useAppState';
 import {
   GraphNode, GraphLink,
@@ -46,6 +47,30 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((_, ref) => {
     [graph?.nodes.length],
   );
 
+  const namespaceCenters = useMemo(() => {
+    const namespaces = Array.from(new Set(
+      graphData.nodes
+        .map((node) => node.namespace)
+        .filter((value): value is string => Boolean(value)),
+    )).sort();
+
+    const centers = new Map<string, { x: number; y: number; z: number }>();
+    if (namespaces.length === 0) return centers;
+
+    const radius = Math.max(90, namespaces.length * 30);
+    namespaces.forEach((namespace, index) => {
+      const angle = (index / namespaces.length) * Math.PI * 2;
+      const zBand = ((index % 3) - 1) * 70;
+      centers.set(namespace, {
+        x: Math.cos(angle) * radius,
+        y: Math.sin(angle) * radius * 0.45,
+        z: zBand,
+      });
+    });
+
+    return centers;
+  }, [graphData.nodes]);
+
   useEffect(() => {
     if (!graph) return;
 
@@ -79,6 +104,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((_, ref) => {
               : n.label === 'Interface' ? 8  : n.label === 'Function'  ? 4  : n.label === 'Method'    ? 3  : 2,
           color: nodeColor,
           glow:  isBlast || isSelected || isCitation || isTool || isHighlit,
+          namespace: n.properties.namespace,
           animationType,
           raw:   n,
         };
@@ -90,6 +116,13 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((_, ref) => {
         source: r.sourceId,
         target: r.targetId,
         color:  EDGE_COLORS[r.type] ?? DEFAULT_EDGE_COLOR,
+        type: r.type,
+        width: r.type === 'CROSS_REPO_CALL' ? 2.4 : 1.0,
+        opacity: r.type === 'CROSS_REPO_CALL' ? 0.95 : 0.6,
+        particles: r.type === 'CROSS_REPO_CALL' ? 6 : 2,
+        particleWidth: r.type === 'CROSS_REPO_CALL' ? 3 : 1.5,
+        curvature: r.type === 'CROSS_REPO_CALL' ? 0.18 : 0,
+        isCrossRepo: r.type === 'CROSS_REPO_CALL',
       }));
 
     setGraphData({ nodes, links });
@@ -106,7 +139,68 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((_, ref) => {
     animatedNodes,
   ]);
 
+  useEffect(() => {
+    if (!fgRef.current) return;
+
+    const clusterForce = (alpha: number) => {
+      graphData.nodes.forEach((node) => {
+        const namespace = node.namespace;
+        if (!namespace) return;
+        const center = namespaceCenters.get(namespace);
+        if (!center) return;
+
+        const strength = 0.18 * alpha;
+        node.vx = (node.vx ?? 0) + ((center.x - (node.x ?? 0)) * strength);
+        node.vy = (node.vy ?? 0) + ((center.y - (node.y ?? 0)) * strength);
+        node.vz = (node.vz ?? 0) + ((center.z - (node.z ?? 0)) * strength);
+      });
+    };
+    clusterForce.initialize = () => {};
+
+    fgRef.current.d3Force('namespace-cluster', clusterForce as any);
+    fgRef.current.d3Force('charge')?.strength(-130);
+    fgRef.current.d3Force('link')?.distance((link: GraphLink) => (
+      link.isCrossRepo ? 130 : 55
+    ));
+    fgRef.current.d3ReheatSimulation();
+
+    return () => {
+      fgRef.current?.d3Force('namespace-cluster', null);
+    };
+  }, [graphData, namespaceCenters]);
+
   const nodeThreeObject = useCallback((node: unknown) => buildNodeObject(node as GraphNode), []);
+
+  const buildCrossRepoLinkObject = useCallback((link: GraphLink) => {
+    if (!link.isCrossRepo) return undefined;
+
+    const material = new THREE.LineDashedMaterial({
+      color: link.color,
+      linewidth: 1,
+      dashSize: 5,
+      gapSize: 3,
+      transparent: true,
+      opacity: 0.85,
+    });
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0, 0, 0, 0], 3));
+    const line = new THREE.Line(geometry, material);
+    line.computeLineDistances();
+    return line;
+  }, []);
+
+  const updateCrossRepoLinkPosition = useCallback((obj: THREE.Object3D, coords: { start: { x: number; y: number; z: number }; end: { x: number; y: number; z: number } }, link: GraphLink) => {
+    if (!link.isCrossRepo || !(obj instanceof THREE.Line)) return null;
+
+    const positions = [
+      coords.start.x, coords.start.y, coords.start.z,
+      coords.end.x, coords.end.y, coords.end.z,
+    ];
+    obj.geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    obj.computeLineDistances();
+    obj.geometry.attributes.position.needsUpdate = true;
+    return true;
+  }, []);
 
   const handleNodeClick = useCallback((node: GraphNode) => {
     if (!node?.raw) return;
@@ -170,14 +264,18 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((_, ref) => {
         nodeVal="val"
         nodeThreeObject={nodeThreeObject as any}
         linkColor="color"
+        linkWidth={(link: GraphLink) => link.width ?? 1}
+        linkOpacity={0.6}
+        linkCurvature={(link: GraphLink) => link.curvature ?? 0}
+        linkThreeObject={buildCrossRepoLinkObject as any}
+        linkThreeObjectExtend={false}
+        linkPositionUpdate={updateCrossRepoLinkPosition as any}
         backgroundColor="#f2f2f7"
         onNodeClick={handleNodeClick as any}
         enableNodeDrag={false}
-        linkOpacity={0.6}
-        linkWidth={1.0}
         warmupTicks={warmupTicks}
-        linkDirectionalParticles={2}
-        linkDirectionalParticleWidth={1.5}
+        linkDirectionalParticles={(link: GraphLink) => link.particles ?? 2}
+        linkDirectionalParticleWidth={(link: GraphLink) => link.particleWidth ?? 1.5}
         linkDirectionalParticleSpeed={0.005}
         linkDirectionalParticleColor="color"
       />
