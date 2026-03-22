@@ -121,7 +121,7 @@ export const Header = ({ onFocusNode, availableRepos = [], onSwitchRepo }: Heade
           <div className="w-7 h-7 flex items-center justify-center bg-black rounded-md shadow-glow text-white text-sm font-bold">
             ◇
           </div>
-          <span className="font-semibold text-[15px] tracking-tight">GitNexus</span>
+          <span className="font-semibold text-[15px] tracking-tight">Miyabi Nexus</span>
         </div>
 
         {/* Project badge / Repo selector dropdown */}
@@ -200,7 +200,7 @@ export const Header = ({ onFocusNode, availableRepos = [], onSwitchRepo }: Heade
           <div className="absolute top-full left-0 right-0 mt-1 bg-surface border border-border-subtle rounded-lg shadow-xl overflow-hidden z-50">
             {searchResults.length === 0 ? (
               <div className="px-4 py-3 text-sm text-text-muted">
-                No nodes found for "{searchQuery}"
+                No nodes found for \"{searchQuery}\"
               </div>
             ) : (
               <div className="max-h-80 overflow-y-auto">
@@ -238,13 +238,13 @@ export const Header = ({ onFocusNode, availableRepos = [], onSwitchRepo }: Heade
       <div className="flex items-center gap-2">
         {/* GitHub Star Button */}
         <a
-          href="https://github.com/abhigyanpatwari/GitNexus"
+          href="https://github.com/ShunsukeHayashi/Miyabi-Nexus"
           target="_blank"
           rel="noopener noreferrer"
           className="flex items-center gap-2 px-3.5 py-2 bg-black hover:bg-gray-800 rounded-lg text-white text-sm font-medium shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all duration-200 group"
         >
           <Github className="w-4 h-4" />
-          <span className="hidden sm:inline">Star if cool</span>
+          <span className="hidden sm:inline">View on GitHub</span>
           <Star className="w-3.5 h-3.5 group-hover:fill-yellow-300 group-hover:text-yellow-300 transition-all" />
           <span className="hidden sm:inline">✨</span>
         </a>
@@ -290,4 +290,3 @@ export const Header = ({ onFocusNode, availableRepos = [], onSwitchRepo }: Heade
     </header>
   );
 };
-

@@ -1,18 +1,3 @@
-/**
- * GraphCanvas.tsx
- * 3D force-directed knowledge graph using react-force-graph-3d.
- *
- * Responsibilities:
- *   - Data wiring: graph state → {nodes, links} for ForceGraph3D
- *   - T007: filter by visibleLabels / visibleEdgeTypes
- *   - T002: per-source AI highlight colour differentiation
- *   - T001: animationType pass-through for pulse/ripple/glow effects
- *   - T005: adaptive warmupTicks scaled by node count
- *   - Camera imperative handle (focusNode)
- *   - Delegates Three.js mesh construction to graphNodeUtils.buildNodeObject (T004 caches)
- *   - Delegates all overlay UI to GraphCanvasOverlay (T006)
- */
-
 import {
   useEffect, useCallback, useMemo, useState,
   forwardRef, useImperativeHandle, useRef,
@@ -45,10 +30,8 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((_, ref) => {
     aiCitationHighlightedNodeIds,
     aiToolHighlightedNodeIds,
     blastRadiusNodeIds,
-    // T007: filter states consumed here
     visibleLabels,
     visibleEdgeTypes,
-    // T001: animation state from triggerNodeAnimation
     animatedNodes,
   } = useAppState();
 
@@ -58,13 +41,11 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((_, ref) => {
     links: [],
   });
 
-  // T005: warmupTicks scales with graph size (10–50)
   const warmupTicks = useMemo(
     () => Math.min(50, Math.max(10, Math.ceil((graph?.nodes.length ?? 0) / 20))),
     [graph?.nodes.length],
   );
 
-  // T007 + T002 + T001: rebuild display graph whenever relevant state changes
   useEffect(() => {
     if (!graph) return;
 
@@ -73,12 +54,10 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((_, ref) => {
     const effectiveBlast  = isAIHighlightsEnabled ? blastRadiusNodeIds : new Set<string>();
 
     const nodes: GraphNode[] = graph.nodes
-      // T007: empty set = show all
       .filter(n => visibleLabelSet.size === 0 || visibleLabelSet.has(n.label))
       .map(n => {
         const isBlast    = effectiveBlast.has(n.id);
         const isSelected = appSelectedNode?.id === n.id;
-        // T002: citation vs tool get distinct colours
         const isCitation = isAIHighlightsEnabled && aiCitationHighlightedNodeIds.has(n.id);
         const isTool     = isAIHighlightsEnabled && aiToolHighlightedNodeIds.has(n.id);
         const isHighlit  = highlightedNodeIds.has(n.id);
@@ -90,7 +69,6 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((_, ref) => {
                         : isHighlit  ? HIGHLIGHT_COLOR
                         : NODE_COLORS[n.label] ?? DEFAULT_NODE_COLOR;
 
-        // T001: pick up animation type if this node is currently animated
         const animationType = animatedNodes.get(n.id)?.type;
 
         return {
@@ -107,7 +85,6 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((_, ref) => {
       });
 
     const links: GraphLink[] = graph.relationships
-      // T007: empty set = show all
       .filter(r => visibleEdgeSet.size === 0 || visibleEdgeSet.has(r.type))
       .map(r => ({
         source: r.sourceId,
@@ -129,7 +106,6 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((_, ref) => {
     animatedNodes,
   ]);
 
-  // Stable callback — reads only from node data already embedded in the GraphNode
   const nodeThreeObject = useCallback((node: unknown) => buildNodeObject(node as GraphNode), []);
 
   const handleNodeClick = useCallback((node: GraphNode) => {
@@ -149,16 +125,11 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((_, ref) => {
 
   useImperativeHandle(ref, () => ({
     focusNode: (nodeId: string) => {
-      // ForceGraph3D のライブデータから位置を取得（シミュレーション後の x/y/z を持つ）
       const liveNodes = (fgRef.current as any)?.graphData()?.nodes as GraphNode[] | undefined;
       const node = liveNodes?.find((n: GraphNode) => n.id === nodeId);
       if (node) handleNodeClick(node);
     },
   }), [handleNodeClick]);
-
-  // ---------------------------------------------------------------------------
-  // Overlay callbacks — passed down to GraphCanvasOverlay
-  // ---------------------------------------------------------------------------
 
   const handleClearSelection = useCallback(() => {
     setSelectedNode(null);
@@ -166,7 +137,6 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((_, ref) => {
   }, [setSelectedNode, setHighlightedNodeIds]);
 
   const handleZoomIn = useCallback(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const pos = (fgRef.current as any)?.cameraPosition() as { x: number; y: number; z: number } | undefined;
     if (pos) fgRef.current?.cameraPosition(
       { x: pos.x * 0.8, y: pos.y * 0.8, z: pos.z * 0.8 }, undefined, 400,
@@ -174,7 +144,6 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((_, ref) => {
   }, []);
 
   const handleZoomOut = useCallback(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const pos = (fgRef.current as any)?.cameraPosition() as { x: number; y: number; z: number } | undefined;
     if (pos) fgRef.current?.cameraPosition(
       { x: pos.x * 1.25, y: pos.y * 1.25, z: pos.z * 1.25 }, undefined, 400,
@@ -186,14 +155,12 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((_, ref) => {
   }, []);
 
   const handleToggleAIHighlights = useCallback(() => {
-    // Clear manual highlights when turning off AI highlights
     if (isAIHighlightsEnabled) setHighlightedNodeIds(new Set());
     toggleAIHighlights();
   }, [isAIHighlightsEnabled, setHighlightedNodeIds, toggleAIHighlights]);
 
   return (
     <div className="relative w-full h-full bg-void overflow-hidden">
-      {/* 3D Force Graph — Phong shading + glow halos + directional particles */}
       <ForceGraph3D
         ref={fgRef as any}
         graphData={graphData as any}
@@ -203,7 +170,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((_, ref) => {
         nodeVal="val"
         nodeThreeObject={nodeThreeObject as any}
         linkColor="color"
-        backgroundColor="#06060a"
+        backgroundColor="#f2f2f7"
         onNodeClick={handleNodeClick as any}
         enableNodeDrag={false}
         linkOpacity={0.6}
@@ -215,7 +182,6 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((_, ref) => {
         linkDirectionalParticleColor="color"
       />
 
-      {/* All overlay UI delegated to GraphCanvasOverlay (T006) */}
       <GraphCanvasOverlay
         selectedNode={appSelectedNode}
         onClearSelection={handleClearSelection}
