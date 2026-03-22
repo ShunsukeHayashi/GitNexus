@@ -290,6 +290,18 @@ const createCommunityNodes = (
 // ============================================================================
 
 /**
+ * Folder names that are too generic to use as community labels.
+ * Defined at module scope to avoid recreating the Set on every node iteration.
+ */
+const GENERIC_FOLDERS = new Set([
+  'src', 'lib', 'core', 'utils', 'common', 'shared', 'helpers',
+  'internal', 'pkg', 'app', 'modules', 'components', 'services',
+  'controllers', 'models', 'views', 'types', 'interfaces',
+  'test', 'tests', '__tests__', 'spec', 'specs',
+  'dist', 'build', 'out', 'bin', 'scripts',
+]);
+
+/**
  * Generate a human-readable label from the most common folder name in the community
  */
 const generateHeuristicLabel = (
@@ -308,14 +320,6 @@ const generateHeuristicLabel = (
     // Get the most specific folder (parent directory)
     if (parts.length >= 2) {
       const folder = parts[parts.length - 2];
-      // Skip generic folder names
-      const GENERIC_FOLDERS = new Set([
-        'src', 'lib', 'core', 'utils', 'common', 'shared', 'helpers',
-        'internal', 'pkg', 'app', 'modules', 'components', 'services',
-        'controllers', 'models', 'views', 'types', 'interfaces',
-        'test', 'tests', '__tests__', 'spec', 'specs',
-        'dist', 'build', 'out', 'bin', 'scripts',
-      ]);
       if (!GENERIC_FOLDERS.has(folder.toLowerCase())) {
         folderCounts.set(folder, (folderCounts.get(folder) || 0) + 1);
       }
