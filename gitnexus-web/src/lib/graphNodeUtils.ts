@@ -17,18 +17,29 @@ export interface GraphNode {
   val: number;
   color: string;
   glow: boolean;
+  namespace?: string;
   /** Animation type from triggerNodeAnimation; independent of the static glow flag */
   animationType?: AnimationType;
   raw: any;
   x?: number;
   y?: number;
   z?: number;
+  vx?: number;
+  vy?: number;
+  vz?: number;
 }
 
 export interface GraphLink {
-  source: string;
-  target: string;
+  source: string | GraphNode;
+  target: string | GraphNode;
   color: string;
+  type: string;
+  width?: number;
+  opacity?: number;
+  particles?: number;
+  particleWidth?: number;
+  curvature?: number;
+  isCrossRepo?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -58,6 +69,7 @@ export const EDGE_COLORS: Record<string, string> = {
   DEFINES:    '#06b6d4',
   IMPORTS:    '#60a5fa',
   CALLS:      '#c084fc',
+  CROSS_REPO_CALL: '#0f766e',
   EXTENDS:    '#fb923c',
   IMPLEMENTS: '#f472b6',
 };
