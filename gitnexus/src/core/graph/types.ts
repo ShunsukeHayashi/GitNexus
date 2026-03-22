@@ -41,6 +41,8 @@ import { SupportedLanguages } from '../../config/supported-languages.js';
 export type NodeProperties = {
   name: string,
   filePath: string,
+  /** Repository name — used for cross-repo namespace disambiguation */
+  repoName?: string,
   startLine?: number,
   endLine?: number,
   language?: SupportedLanguages,
@@ -87,6 +89,7 @@ export type RelationshipType =
   | 'ACCESSES'
   | 'MEMBER_OF'
   | 'STEP_IN_PROCESS'
+  | 'CROSS_REPO_CALL'
 
 export interface GraphNode {
   id:  string,
@@ -105,6 +108,10 @@ export interface GraphRelationship {
   reason: string,
   /** Step number for STEP_IN_PROCESS relationships (1-indexed) */
   step?: number,
+  /** Source repository name — set only for CROSS_REPO_CALL edges */
+  sourceRepo?: string,
+  /** Target repository name — set only for CROSS_REPO_CALL edges */
+  targetRepo?: string,
 }
 
 export interface KnowledgeGraph {
