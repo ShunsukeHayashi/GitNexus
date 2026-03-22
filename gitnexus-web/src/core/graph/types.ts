@@ -21,6 +21,7 @@ export type NodeLabel =
 export type NodeProperties = {
   name: string,
   filePath: string,
+  namespace?: string,
   startLine?: number,
   endLine?: number,
   language?: string,
@@ -46,6 +47,7 @@ export type NodeProperties = {
 export type RelationshipType = 
   | 'CONTAINS' 
   | 'CALLS' 
+  | 'CROSS_REPO_CALL'
   | 'INHERITS' 
   | 'OVERRIDES' 
   | 'IMPORTS'
@@ -55,6 +57,8 @@ export type RelationshipType =
   | 'IMPLEMENTS'
   | 'EXTENDS'
   | 'HAS_METHOD'
+  | 'HAS_PROPERTY'
+  | 'ACCESSES'
   | 'MEMBER_OF'
   | 'STEP_IN_PROCESS'
 
