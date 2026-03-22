@@ -912,12 +912,21 @@ export const SWIFT_QUERIES = `
   (inheritance_specifier inherits_from: (user_type (type_identifier) @heritage.extends))) @heritage
 
 ; Write access: obj.field = value
+; tree-sitter-swift@0.6.0 changed the AST for field assignments:
+;   (assignment
+;     target: (directly_assignable_expression
+;       (navigation_expression
+;         target: (simple_identifier)
+;         suffix: (navigation_suffix suffix: (simple_identifier)))))
+; The old query matched navigation_suffix as a direct child of directly_assignable_expression,
+; but @0.6.0 nests it inside navigation_expression — causing TSQueryErrorStructure (#386, #406).
 (assignment
-  (directly_assignable_expression
-    (_) @assignment.receiver
-    (navigation_suffix
-      (simple_identifier) @assignment.property))
-  (_)) @assignment
+  target: (directly_assignable_expression
+    (navigation_expression
+      target: (_) @assignment.receiver
+      suffix: (navigation_suffix
+        suffix: (simple_identifier) @assignment.property)))
+) @assignment
 
 `;
 

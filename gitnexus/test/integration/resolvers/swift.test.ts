@@ -224,3 +224,46 @@ describe.skipIf(!swiftAvailable)('Swift return-type inference via function retur
     expect(saveCall).toBeDefined();
   });
 });
+
+// Regression test for Issue #386 / #406:
+// Swift assignment query (`obj.field = value`) failed with TSQueryErrorStructure
+// in tree-sitter-swift@0.6.0 because the old query matched navigation_suffix as a
+// direct child of directly_assignable_expression, but @0.6.0 nests it inside
+// navigation_expression. The fix uses named fields (target:/suffix:) to match
+// the actual AST structure, allowing Swift symbol extraction to succeed.
+describe.skipIf(!swiftAvailable)('Swift field assignment query — TSQueryErrorStructure regression (#386, #406)', () => {
+  let result: PipelineResult;
+
+  beforeAll(async () => {
+    result = await runPipelineFromRepo(
+      path.join(FIXTURES, 'swift-field-assignment'),
+      () => {},
+    );
+  }, 60000);
+
+  it('extracts Swift symbols without TSQueryErrorStructure crash', () => {
+    // Before the fix: 0 nodes/edges because the broken assignment query caused
+    // ALL Swift extraction to fail. After the fix: User and App classes are found.
+    const nodes = getNodesByLabel(result, 'Class');
+    expect(nodes.length).toBeGreaterThan(0);
+  });
+
+  it('detects User and App classes', () => {
+    const classes = getNodesByLabel(result, 'Class');
+    const names = classes.map(c => c.name);
+    expect(names).toContain('User');
+    expect(names).toContain('App');
+  });
+
+  it('detects update method on User', () => {
+    const fns = getNodesByLabel(result, 'Function');
+    const update = fns.find(f => f.name === 'update');
+    expect(update).toBeDefined();
+  });
+
+  it('resolves user.update() CALLS edge from App.run to User.update', () => {
+    const calls = getRelationships(result, 'CALLS');
+    const updateCall = calls.find(c => c.target === 'update');
+    expect(updateCall).toBeDefined();
+  });
+});
