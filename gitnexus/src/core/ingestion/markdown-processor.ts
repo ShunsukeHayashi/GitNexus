@@ -6,6 +6,7 @@
  * cross-file links.
  */
 
+import { RELATIONSHIP_CONFIDENCE } from './resolution-context.js';
 import path from 'node:path';
 import { generateId } from '../../lib/utils.js';
 import { KnowledgeGraph, GraphNode, GraphRelationship } from '../graph/types.js';
@@ -145,7 +146,7 @@ export const processMarkdown = (
           type: 'IMPORTS',
           sourceId: fileNodeId,
           targetId: targetFileId,
-          confidence: 0.8,
+          confidence: RELATIONSHIP_CONFIDENCE.heuristic,
           reason: 'markdown-link',
         });
         totalLinks++;

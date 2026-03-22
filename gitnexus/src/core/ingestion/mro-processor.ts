@@ -19,6 +19,7 @@
  * Cypher: MATCH (c:Class)-[r:CodeRelation {type: 'OVERRIDES'}]->(m:Method)
  */
 
+import { RELATIONSHIP_CONFIDENCE } from './resolution-context.js';
 import { KnowledgeGraph, GraphRelationship } from '../graph/types.js';
 import { generateId } from '../../lib/utils.js';
 import { SupportedLanguages } from '../../config/supported-languages.js';
@@ -224,11 +225,11 @@ function resolveByMroOrder(
       return {
         resolvedTo: match.methodId,
         reason: `${reasonPrefix}: ${match.className}::${methodName}`,
-        confidence: 0.9,  // MRO-ordered resolution
+        confidence: RELATIONSHIP_CONFIDENCE.mroOrdered,
       };
     }
   }
-  return { resolvedTo: defs[0].methodId, reason: `${reasonPrefix} fallback: first definition`, confidence: 0.7 };
+  return { resolvedTo: defs[0].methodId, reason: `${reasonPrefix} fallback: first definition`, confidence: RELATIONSHIP_CONFIDENCE.fallback };
 }
 
 function resolveCsharpJava(
@@ -252,7 +253,7 @@ function resolveCsharpJava(
     return {
       resolvedTo: classDefs[0].methodId,
       reason: `class method wins: ${classDefs[0].className}::${methodName}`,
-      confidence: 0.95,  // Class method is authoritative
+      confidence: RELATIONSHIP_CONFIDENCE.classMethod,
     };
   }
 
@@ -268,11 +269,11 @@ function resolveCsharpJava(
     return {
       resolvedTo: interfaceDefs[0].methodId,
       reason: `single interface default: ${interfaceDefs[0].className}::${methodName}`,
-      confidence: 0.85,  // Single interface, unambiguous
+      confidence: RELATIONSHIP_CONFIDENCE.singleInterface,
     };
   }
 
-  return { resolvedTo: null, reason: 'no resolution found', confidence: 0.5 };
+  return { resolvedTo: null, reason: 'no resolution found', confidence: RELATIONSHIP_CONFIDENCE.uncertain };
 }
 
 // ---------------------------------------------------------------------------

@@ -35,6 +35,37 @@ export const TIER_CONFIDENCE: Record<ResolutionTier, number> = {
   'global': 0.5,
 };
 
+/**
+ * Confidence scores for relationship types.
+ *
+ * Structural relationships (DEFINES, CONTAINS, IMPORTS, HAS_PROPERTY) are
+ * always 1.0 — they are syntactically determined.
+ *
+ * Resolution-derived relationships use the confidence from the resolution
+ * tier (TIER_CONFIDENCE) or MRO_CONFIDENCE below.
+ *
+ * See Issue #429 for rationale.
+ */
+export const RELATIONSHIP_CONFIDENCE = {
+  /** Syntactically determined — always correct. */
+  structural: 1.0,
+  /** Class method is authoritative for its name. */
+  classMethod: 0.95,
+  /** MRO-ordered resolution — strong but may have diamond ambiguity. */
+  mroOrdered: 0.9,
+  /** Single interface implementor — unambiguous. */
+  singleInterface: 0.85,
+  /** Heuristic match (e.g., markdown cross-reference, decay factor). */
+  heuristic: 0.8,
+  /** Fallback: first definition when no better signal exists. */
+  fallback: 0.7,
+  /** Unresolved or ambiguous — requires manual inspection. */
+  uncertain: 0.5,
+} as const;
+
+export type RelationshipConfidenceLevel = keyof typeof RELATIONSHIP_CONFIDENCE;
+
+
 // --- Map types ---
 export type ImportMap = Map<string, Set<string>>;
 export type PackageMap = Map<string, Set<string>>;
