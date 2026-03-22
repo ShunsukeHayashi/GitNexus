@@ -19,6 +19,8 @@ export interface GraphNode {
   glow: boolean;
   /** Animation type from triggerNodeAnimation; independent of the static glow flag */
   animationType?: AnimationType;
+  /** Repository namespace — used for cluster force grouping (T012) */
+  repoName?: string;
   raw: any;
   x?: number;
   y?: number;
@@ -33,6 +35,12 @@ export interface GraphLink {
   source: string;
   target: string;
   color: string;
+  /** True when this is a CROSS_REPO_CALL edge — rendered as dashed line (T012) */
+  isCrossRepo?: boolean;
+  /** Source repository name for CROSS_REPO_CALL edges */
+  sourceRepo?: string;
+  /** Target repository name for CROSS_REPO_CALL edges */
+  targetRepo?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -58,16 +66,53 @@ export const NODE_COLORS: Record<string, string> = {
 
 /** Vivid edge colors per relationship type */
 export const EDGE_COLORS: Record<string, string> = {
-  CONTAINS:   '#22c55e',
-  DEFINES:    '#06b6d4',
-  IMPORTS:    '#60a5fa',
-  CALLS:      '#c084fc',
-  EXTENDS:    '#fb923c',
-  IMPLEMENTS: '#f472b6',
+  CONTAINS:        '#22c55e',
+  DEFINES:         '#06b6d4',
+  IMPORTS:         '#60a5fa',
+  CALLS:           '#c084fc',
+  EXTENDS:         '#fb923c',
+  IMPLEMENTS:      '#f472b6',
+  // T012: cross-repo call — vivid orange so it stands out from in-repo CALLS (violet)
+  CROSS_REPO_CALL: '#f97316',
 };
 
 export const DEFAULT_NODE_COLOR = '#94a3b8';
 export const DEFAULT_EDGE_COLOR = '#4a4a70';
+
+// T012: distinct color used exclusively for CROSS_REPO_CALL dashed edges
+export const CROSS_REPO_EDGE_COLOR = '#f97316'; // Bright orange
+
+// ---------------------------------------------------------------------------
+// T012: Repo-cluster palette — up to 12 distinct colors for repo bounding
+// hulls and tinted cluster labels.
+// ---------------------------------------------------------------------------
+export const REPO_CLUSTER_COLORS = [
+  '#38bdf8', // sky
+  '#34d399', // emerald
+  '#f472b6', // pink
+  '#fbbf24', // amber
+  '#a78bfa', // violet
+  '#fb923c', // orange
+  '#4ade80', // green
+  '#f87171', // red
+  '#60a5fa', // blue
+  '#c084fc', // purple
+  '#2dd4bf', // teal
+  '#facc15', // yellow
+] as const;
+
+/**
+ * Return a consistent color for a given repository name.
+ * Uses a simple djb2-style hash so the same repo always maps to the same color.
+ */
+export function getRepoColor(repoName: string): string {
+  let hash = 5381;
+  for (let i = 0; i < repoName.length; i++) {
+    hash = ((hash << 5) + hash) ^ repoName.charCodeAt(i);
+    hash = hash >>> 0; // keep unsigned 32-bit
+  }
+  return REPO_CLUSTER_COLORS[hash % REPO_CLUSTER_COLORS.length];
+}
 
 // Highlight colors — one per source (T002)
 export const CITATION_COLOR  = '#06b6d4';  // Cyan   — AI citation grounding
