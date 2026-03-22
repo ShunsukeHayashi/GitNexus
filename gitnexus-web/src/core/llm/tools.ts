@@ -43,19 +43,22 @@ export const createGraphRAGTools = (
       
       // Step 1: Hybrid search (BM25 + semantic with RRF)
       let searchResults: any[] = [];
+      let searchMode = 'unavailable';
       
       if (isBM25Ready()) {
         try {
           searchResults = await hybridSearch(query, k);
+          searchMode = 'hybrid';
         } catch (error) {
           // Fallback to semantic-only if hybrid fails
           if (isEmbeddingReady()) {
             searchResults = await semanticSearch(query, k);
+            searchMode = 'semantic-only (BM25 failed)';
           }
         }
       } else if (isEmbeddingReady()) {
-        // Semantic only if BM25 not ready
         searchResults = await semanticSearch(query, k);
+        searchMode = 'semantic-only (BM25 not ready)';
       } else {
         return 'Search is not available. Please load a repository first.';
       }
@@ -200,7 +203,7 @@ export const createGraphRAGTools = (
       };
       
       if (!shouldGroup) {
-        return `Found ${searchResults.length} matches:\n\n${results.map(r => formatResult(r)).join('\n\n')}`;
+        return `Found ${searchResults.length} matches (mode: ${searchMode}):\n\n${results.map(r => formatResult(r)).join('\n\n')}`;
       }
       
       // Group by process (or "No process")
@@ -231,7 +234,10 @@ export const createGraphRAGTools = (
       });
       
       const lines: string[] = [];
-      lines.push(`Found ${searchResults.length} matches grouped by process:`);
+      lines.push(`Found ${searchResults.length} matches (mode: ${searchMode}):`);
+            if (searchMode !== 'hybrid') {
+              lines.push(`⚠️ Search quality degraded: ${searchMode}. Exact keyword matches may be missed.`);
+            }
       lines.push('');
       
       for (const [pid, group] of sortedProcesses) {
@@ -439,7 +445,7 @@ MATCH (n:Function {id: emb.nodeId}) RETURN n`,
   // ============================================================================
   
   const readTool = tool(
-    async ({ filePath }: { filePath: string }) => {
+    async ({ filePath, startLine, endLine }: { filePath: string; startLine?: number; endLine?: number }) => {
       const normalizedRequest = filePath.replace(/\\/g, '/').toLowerCase();
       
       // Try exact match first
@@ -496,21 +502,32 @@ MATCH (n:Function {id: emb.nodeId}) RETURN n`,
         return `File not found: "${filePath}"`;
       }
       
+      const allLines = content.split('\n');
+      const totalLines = allLines.length;
+
+      // Line range support
+      if (startLine || endLine) {
+        const start = Math.max(1, startLine ?? 1);
+        const end = Math.min(totalLines, endLine ?? totalLines);
+        const selectedLines = allLines.slice(start - 1, end);
+        return `File: ${actualPath} (lines ${start}-${end} of ${totalLines})\n\n${selectedLines.join('\n')}`;
+      }
+
       // Truncate large files
       const MAX_CONTENT = 50000;
       if (content.length > MAX_CONTENT) {
-        const lines = content.split('\n').length;
-        return `File: ${actualPath} (${lines} lines, truncated)\n\n${content.slice(0, MAX_CONTENT)}\n\n... [truncated]`;
+        return `File: ${actualPath} (${totalLines} lines, truncated)\n\n${content.slice(0, MAX_CONTENT)}\n\n... [truncated at 50KB — use startLine/endLine to read specific sections]`;
       }
       
-      const lines = content.split('\n').length;
-      return `File: ${actualPath} (${lines} lines)\n\n${content}`;
+      return `File: ${actualPath} (${totalLines} lines)\n\n${content}`;
     },
     {
       name: 'read',
-      description: 'Read the full content of a file. Use to see source code after finding files via search or grep.',
+      description: 'Read file content. Use to see source code after finding files via search or grep. Supports optional line ranges (startLine/endLine) for focused reading of specific sections.',
       schema: z.object({
         filePath: z.string().describe('File path to read (can be partial like "src/utils.ts")'),
+        startLine: z.number().optional().nullable().describe('Start line number (1-indexed). Use with endLine to read a specific range.'),
+        endLine: z.number().optional().nullable().describe('End line number (inclusive). Use with startLine to read a specific range.'),
       }),
     }
   );

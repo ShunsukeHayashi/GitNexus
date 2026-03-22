@@ -29,6 +29,14 @@ export interface Hotspot {
 }
 
 /**
+ * Process/execution flow summary
+ */
+export interface ProcessSummary {
+  label: string;
+  stepCount: number;
+}
+
+/**
  * Folder info for tree rendering
  */
 interface FolderInfo {
@@ -46,6 +54,7 @@ interface FolderInfo {
 export interface CodebaseContext {
   stats: CodebaseStats;
   hotspots: Hotspot[];
+  processes: ProcessSummary[];
   folderTree: string;
 }
 
@@ -139,6 +148,43 @@ export async function getHotspots(
     }).filter(h => h.name && h.type);
   } catch (error) {
     console.error('Failed to get hotspots:', error);
+    return [];
+  }
+}
+
+/**
+ * Get process/execution flow summaries
+ * Processes represent detected execution paths through the codebase
+ */
+export async function getProcessSummary(
+  executeQuery: (cypher: string) => Promise<any[]>,
+  limit: number = 15
+): Promise<ProcessSummary[]> {
+  try {
+    const query = `
+      MATCH (p:Process)
+      WHERE p.label IS NOT NULL AND p.stepCount > 1
+      RETURN p.label AS label, p.stepCount AS stepCount
+      ORDER BY p.stepCount DESC
+      LIMIT ${limit}
+    `;
+
+    const results = await executeQuery(query);
+
+    return results.map(row => {
+      if (Array.isArray(row)) {
+        return {
+          label: row[0] ?? 'Unknown',
+          stepCount: row[1] ?? 0,
+        };
+      }
+      return {
+        label: row.label ?? 'Unknown',
+        stepCount: row.stepCount ?? 0,
+      };
+    }).filter(p => p.label && p.label !== 'Unknown');
+  } catch (error) {
+    console.error('Failed to get process summary:', error);
     return [];
   }
 }
@@ -356,15 +402,17 @@ export async function buildCodebaseContext(
   projectName: string
 ): Promise<CodebaseContext> {
   // Run all queries in parallel for speed
-  const [stats, hotspots, folderTree] = await Promise.all([
+  const [stats, hotspots, processes, folderTree] = await Promise.all([
     getCodebaseStats(executeQuery, projectName),
     getHotspots(executeQuery),
+    getProcessSummary(executeQuery),
     getFolderTree(executeQuery),
   ]);
 
   return {
     stats,
     hotspots,
+    processes,
     folderTree,
   };
 }
@@ -398,6 +446,16 @@ export function formatContextForPrompt(context: CodebaseContext): string {
     lines.push('');
   }
   
+
+  // Processes / execution flows
+  if (context.processes && context.processes.length > 0) {
+    lines.push('**Execution Flows** (detected paths):');
+    context.processes.slice(0, 10).forEach(p => {
+      lines.push(`- ${p.label} (${p.stepCount} steps)`);
+    });
+    lines.push('');
+  }
+
   // Folder tree
   if (folderTree) {
     lines.push('### 📁 STRUCTURE');
