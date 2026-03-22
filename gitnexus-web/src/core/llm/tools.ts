@@ -1487,6 +1487,109 @@ Additional output sections:
     }
   );
 
+
+  // ============================================================================
+  // TOOL 8: SUGGEST (Read-only diff proposals)
+  // ============================================================================
+
+  const suggestTool = tool(
+    async ({
+      filePath,
+      startLine,
+      endLine,
+      replacement,
+      reason,
+    }: {
+      filePath: string;
+      startLine: number;
+      endLine: number;
+      replacement: string;
+      reason: string;
+    }) => {
+      // Find the file in fileContents
+      const normalizedRequest = filePath.replace(/\\/g, '/').toLowerCase();
+      let content = fileContents.get(filePath);
+      let actualPath = filePath;
+
+      if (!content) {
+        for (const [path, fileContent] of fileContents.entries()) {
+          if (path.toLowerCase() === normalizedRequest || path.toLowerCase().endsWith(normalizedRequest)) {
+            actualPath = path;
+            content = fileContent;
+            break;
+          }
+        }
+      }
+
+      if (!content) {
+        return `File not found: "${filePath}". Use search or read to find the correct path first.`;
+      }
+
+      const lines = content.split('\n');
+      const totalLines = lines.length;
+
+      if (startLine < 1 || endLine > totalLines || startLine > endLine) {
+        return `Invalid line range ${startLine}-${endLine} (file has ${totalLines} lines).`;
+      }
+
+      // Extract original lines
+      const originalLines = lines.slice(startLine - 1, endLine);
+      const original = originalLines.join('\n');
+
+      // Build unified diff format
+      const replacementLines = replacement.split('\n');
+      const removedLines = originalLines.map(l => `- ${l}`).join('\n');
+      const addedLines = replacementLines.map(l => `+ ${l}`).join('\n');
+
+      const contextBefore = lines.slice(Math.max(0, startLine - 4), startLine - 1).map(l => `  ${l}`).join('\n');
+      const contextAfter = lines.slice(endLine, Math.min(totalLines, endLine + 3)).map(l => `  ${l}`).join('\n');
+
+      const diff = [
+        `\`\`\`diff`,
+        `--- a/${actualPath}`,
+        `+++ b/${actualPath}`,
+        `@@ -${startLine},${endLine - startLine + 1} +${startLine},${replacementLines.length} @@`,
+        contextBefore,
+        removedLines,
+        addedLines,
+        contextAfter,
+        `\`\`\``,
+      ].filter(Boolean).join('\n');
+
+      return [
+        `## Suggested Change: ${actualPath} (lines ${startLine}-${endLine})`,
+        ``,
+        `**Reason:** ${reason}`,
+        ``,
+        diff,
+        ``,
+        `> ⚠️ This is a read-only suggestion. No files were modified.`,
+        `> Copy the replacement lines or use your editor to apply.`,
+      ].join('\n');
+    },
+    {
+      name: 'suggest',
+      description: `Propose a code change as a unified diff (read-only, no files modified).
+
+Use when you have identified a specific fix and want to show exactly what should change.
+The suggestion is displayed as a diff block in the UI for the user to review and apply.
+
+IMPORTANT: This tool NEVER modifies files. It only generates a diff preview.
+
+Best practices:
+- Be specific: narrow startLine/endLine to the exact lines that need changing
+- Include a clear reason explaining WHY this change is needed
+- Reference the Issue or analysis that led to this suggestion`,
+      schema: z.object({
+        filePath: z.string().describe('File path to modify (use exact path from read/search)'),
+        startLine: z.number().describe('First line to replace (1-indexed, inclusive)'),
+        endLine: z.number().describe('Last line to replace (1-indexed, inclusive)'),
+        replacement: z.string().describe('New code to replace lines startLine through endLine'),
+        reason: z.string().describe('Why this change is needed (shown to user in the diff view)'),
+      }),
+    }
+  );
+
   // ============================================================================
   // RETURN ALL TOOLS
   // ============================================================================
@@ -1499,5 +1602,6 @@ Additional output sections:
     overviewTool,
     exploreTool,
     impactTool,
+    suggestTool,
   ];
 };
