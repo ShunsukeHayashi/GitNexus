@@ -118,7 +118,7 @@ export const Header = ({ onFocusNode, availableRepos = [], onSwitchRepo }: Heade
       <div className="flex items-center gap-4">
         {/* Logo */}
         <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 flex items-center justify-center bg-gradient-to-br from-accent to-node-interface rounded-md shadow-glow text-white text-sm font-bold">
+          <div className="w-7 h-7 flex items-center justify-center bg-black rounded-md shadow-glow text-white text-sm font-bold">
             ◇
           </div>
           <span className="font-semibold text-[15px] tracking-tight">GitNexus</span>
@@ -140,7 +140,7 @@ export const Header = ({ onFocusNode, availableRepos = [], onSwitchRepo }: Heade
 
             {/* Repo dropdown */}
             {isRepoDropdownOpen && availableRepos.length >= 2 && (
-              <div className="absolute top-full left-0 mt-1 w-72 bg-surface border border-border-subtle rounded-lg shadow-xl overflow-hidden z-50">
+              <div className="absolute top-full left-0 mt-1 w-72 bg-surface max-h-[70vh] overflow-y-auto border border-border-subtle rounded-lg shadow-xl overflow-hidden z-50">
                 {availableRepos.map((repo) => {
                   const isCurrent = repo.name === projectName;
                   return (
@@ -241,7 +241,7 @@ export const Header = ({ onFocusNode, availableRepos = [], onSwitchRepo }: Heade
           href="https://github.com/abhigyanpatwari/GitNexus"
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center gap-2 px-3.5 py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 rounded-lg text-white text-sm font-medium shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all duration-200 group"
+          className="flex items-center gap-2 px-3.5 py-2 bg-black hover:bg-gray-800 rounded-lg text-white text-sm font-medium shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all duration-200 group"
         >
           <Github className="w-4 h-4" />
           <span className="hidden sm:inline">Star if cool</span>
@@ -279,7 +279,7 @@ export const Header = ({ onFocusNode, availableRepos = [], onSwitchRepo }: Heade
             flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-medium transition-all
             ${isRightPanelOpen && rightPanelTab === 'chat'
               ? 'bg-accent text-white shadow-glow'
-              : 'bg-gradient-to-r from-accent to-accent-dim text-white shadow-glow hover:shadow-lg hover:-translate-y-0.5'
+              : 'bg-black hover:bg-gray-800 text-white shadow-glow hover:shadow-lg hover:-translate-y-0.5'
             }
           `}
         >

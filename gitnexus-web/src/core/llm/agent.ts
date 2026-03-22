@@ -283,7 +283,8 @@ export const createGraphRAGAgent = (
   isEmbeddingReady: () => boolean,
   isBM25Ready: () => boolean,
   fileContents: Map<string, string>,
-  codebaseContext?: CodebaseContext
+  codebaseContext?: CodebaseContext,
+  maxIterations: number = 10
 ) => {
   const model = createChatModel(config);
   const tools = createGraphRAGTools(
@@ -311,6 +312,9 @@ export const createGraphRAGAgent = (
     tools: tools as any,
     messageModifier: new SystemMessage(systemPrompt) as any,
   });
+  
+  // Store recursionLimit for use in stream/invoke calls
+  (agent as any)._recursionLimit = maxIterations * 2 + 1; // Each iteration = 1 LLM call + 1 tool call
   
   return agent;
 };
@@ -531,6 +535,10 @@ export async function* streamAgentResponse(
       console.log('✅ Stream completed normally, yielding done');
     }
     yield { type: 'done' };
+    // Log iteration count in dev mode
+    if (import.meta.env.DEV) {
+      console.log(`📊 Agent completed: ${yieldedToolCalls.size} tool calls`);
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     // DEBUG: Stream error

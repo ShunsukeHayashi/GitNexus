@@ -1,10 +1,32 @@
-import { useEffect, useCallback, useMemo, useState, forwardRef, useImperativeHandle } from 'react';
-import { ZoomIn, ZoomOut, Maximize2, Focus, RotateCcw, Play, Pause, Lightbulb, LightbulbOff } from 'lucide-react';
-import { useSigma } from '../hooks/useSigma';
+/**
+ * GraphCanvas.tsx
+ * 3D force-directed knowledge graph using react-force-graph-3d.
+ *
+ * Responsibilities:
+ *   - Data wiring: graph state → {nodes, links} for ForceGraph3D
+ *   - T007: filter by visibleLabels / visibleEdgeTypes
+ *   - T002: per-source AI highlight colour differentiation
+ *   - T001: animationType pass-through for pulse/ripple/glow effects
+ *   - T005: adaptive warmupTicks scaled by node count
+ *   - Camera imperative handle (focusNode)
+ *   - Delegates Three.js mesh construction to graphNodeUtils.buildNodeObject (T004 caches)
+ *   - Delegates all overlay UI to GraphCanvasOverlay (T006)
+ */
+
+import {
+  useEffect, useCallback, useMemo, useState,
+  forwardRef, useImperativeHandle, useRef,
+} from 'react';
+import ForceGraph3D, { ForceGraphMethods } from 'react-force-graph-3d';
 import { useAppState } from '../hooks/useAppState';
-import { knowledgeGraphToGraphology, filterGraphByDepth, SigmaNodeAttributes, SigmaEdgeAttributes } from '../lib/graph-adapter';
-import { QueryFAB } from './QueryFAB';
-import Graph from 'graphology';
+import {
+  GraphNode, GraphLink,
+  NODE_COLORS, EDGE_COLORS,
+  DEFAULT_NODE_COLOR, DEFAULT_EDGE_COLOR,
+  BLAST_COLOR, SELECTED_COLOR, TOOL_COLOR, CITATION_COLOR, HIGHLIGHT_COLOR,
+  buildNodeObject,
+} from '../lib/graphNodeUtils';
+import { GraphCanvasOverlay } from './GraphCanvasOverlay';
 
 export interface GraphCanvasHandle {
   focusNode: (nodeId: string) => void;
@@ -15,312 +37,194 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((_, ref) => {
     graph,
     setSelectedNode,
     selectedNode: appSelectedNode,
-    visibleLabels,
-    visibleEdgeTypes,
     openCodePanel,
-    depthFilter,
+    isAIHighlightsEnabled,
+    toggleAIHighlights,
     highlightedNodeIds,
     setHighlightedNodeIds,
     aiCitationHighlightedNodeIds,
     aiToolHighlightedNodeIds,
     blastRadiusNodeIds,
-    isAIHighlightsEnabled,
-    toggleAIHighlights,
+    // T007: filter states consumed here
+    visibleLabels,
+    visibleEdgeTypes,
+    // T001: animation state from triggerNodeAnimation
     animatedNodes,
   } = useAppState();
-  const [hoveredNodeName, setHoveredNodeName] = useState<string | null>(null);
 
-  const effectiveHighlightedNodeIds = useMemo(() => {
-    if (!isAIHighlightsEnabled) return highlightedNodeIds;
-    const next = new Set(highlightedNodeIds);
-    for (const id of aiCitationHighlightedNodeIds) next.add(id);
-    for (const id of aiToolHighlightedNodeIds) next.add(id);
-    // Note: blast radius nodes are handled separately with red color
-    return next;
-  }, [highlightedNodeIds, aiCitationHighlightedNodeIds, aiToolHighlightedNodeIds, isAIHighlightsEnabled]);
-
-  // Blast radius nodes (only when AI highlights enabled)
-  const effectiveBlastRadiusNodeIds = useMemo(() => {
-    if (!isAIHighlightsEnabled) return new Set<string>();
-    return blastRadiusNodeIds;
-  }, [blastRadiusNodeIds, isAIHighlightsEnabled]);
-
-  // Animated nodes (only when AI highlights enabled)
-  const effectiveAnimatedNodes = useMemo(() => {
-    if (!isAIHighlightsEnabled) return new Map();
-    return animatedNodes;
-  }, [animatedNodes, isAIHighlightsEnabled]);
-
-  const handleNodeClick = useCallback((nodeId: string) => {
-    if (!graph) return;
-    const node = graph.nodes.find(n => n.id === nodeId);
-    if (node) {
-      setSelectedNode(node);
-      openCodePanel();
-    }
-  }, [graph, setSelectedNode, openCodePanel]);
-
-  const handleNodeHover = useCallback((nodeId: string | null) => {
-    if (!nodeId || !graph) {
-      setHoveredNodeName(null);
-      return;
-    }
-    const node = graph.nodes.find(n => n.id === nodeId);
-    if (node) {
-      setHoveredNodeName(node.properties.name);
-    }
-  }, [graph]);
-
-  const handleStageClick = useCallback(() => {
-    setSelectedNode(null);
-  }, [setSelectedNode]);
-
-  const {
-    containerRef,
-    sigmaRef,
-    setGraph: setSigmaGraph,
-    zoomIn,
-    zoomOut,
-    resetZoom,
-    focusNode,
-    isLayoutRunning,
-    startLayout,
-    stopLayout,
-    selectedNode: sigmaSelectedNode,
-    setSelectedNode: setSigmaSelectedNode,
-  } = useSigma({
-    onNodeClick: handleNodeClick,
-    onNodeHover: handleNodeHover,
-    onStageClick: handleStageClick,
-    highlightedNodeIds: effectiveHighlightedNodeIds,
-    blastRadiusNodeIds: effectiveBlastRadiusNodeIds,
-    animatedNodes: effectiveAnimatedNodes,
-    visibleEdgeTypes,
+  const fgRef = useRef<ForceGraphMethods | undefined>(undefined);
+  const [graphData, setGraphData] = useState<{ nodes: GraphNode[]; links: GraphLink[] }>({
+    nodes: [],
+    links: [],
   });
 
-  // Expose focusNode to parent via ref
-  useImperativeHandle(ref, () => ({
-    focusNode: (nodeId: string) => {
-      // Also update app state so the selection syncs properly
-      if (graph) {
-        const node = graph.nodes.find(n => n.id === nodeId);
-        if (node) {
-          setSelectedNode(node);
-          openCodePanel();
-        }
-      }
-      focusNode(nodeId);
-    }
-  }), [focusNode, graph, setSelectedNode, openCodePanel]);
+  // T005: warmupTicks scales with graph size (10–50)
+  const warmupTicks = useMemo(
+    () => Math.min(50, Math.max(10, Math.ceil((graph?.nodes.length ?? 0) / 20))),
+    [graph?.nodes.length],
+  );
 
-  // Update Sigma graph when KnowledgeGraph changes
+  // T007 + T002 + T001: rebuild display graph whenever relevant state changes
   useEffect(() => {
     if (!graph) return;
 
-    // Build communityMemberships map from MEMBER_OF relationships
-    // MEMBER_OF edges: nodeId -> communityId (stored as targetId)
-    const communityMemberships = new Map<string, number>();
-    graph.relationships.forEach(rel => {
-      if (rel.type === 'MEMBER_OF') {
-        // Find the community node to get its index
-        const communityNode = graph.nodes.find(n => n.id === rel.targetId && n.label === 'Community');
-        if (communityNode) {
-          // Extract community index from id (e.g., "comm_5" -> 5)
-          const communityIdx = parseInt(rel.targetId.replace('comm_', ''), 10) || 0;
-          communityMemberships.set(rel.sourceId, communityIdx);
-        }
-      }
-    });
+    const visibleLabelSet = new Set<string>(visibleLabels);
+    const visibleEdgeSet  = new Set<string>(visibleEdgeTypes);
+    const effectiveBlast  = isAIHighlightsEnabled ? blastRadiusNodeIds : new Set<string>();
 
-    const sigmaGraph = knowledgeGraphToGraphology(graph, communityMemberships);
-    setSigmaGraph(sigmaGraph);
-  }, [graph, setSigmaGraph]);
+    const nodes: GraphNode[] = graph.nodes
+      // T007: empty set = show all
+      .filter(n => visibleLabelSet.size === 0 || visibleLabelSet.has(n.label))
+      .map(n => {
+        const isBlast    = effectiveBlast.has(n.id);
+        const isSelected = appSelectedNode?.id === n.id;
+        // T002: citation vs tool get distinct colours
+        const isCitation = isAIHighlightsEnabled && aiCitationHighlightedNodeIds.has(n.id);
+        const isTool     = isAIHighlightsEnabled && aiToolHighlightedNodeIds.has(n.id);
+        const isHighlit  = highlightedNodeIds.has(n.id);
 
-  // Update node visibility when filters change
-  useEffect(() => {
-    const sigma = sigmaRef.current;
-    if (!sigma) return;
+        const nodeColor = isBlast    ? BLAST_COLOR
+                        : isSelected ? SELECTED_COLOR
+                        : isTool     ? TOOL_COLOR
+                        : isCitation ? CITATION_COLOR
+                        : isHighlit  ? HIGHLIGHT_COLOR
+                        : NODE_COLORS[n.label] ?? DEFAULT_NODE_COLOR;
 
-    const sigmaGraph = sigma.getGraph() as Graph<SigmaNodeAttributes, SigmaEdgeAttributes>;
-    if (sigmaGraph.order === 0) return; // Don't filter empty graph
+        // T001: pick up animation type if this node is currently animated
+        const animationType = animatedNodes.get(n.id)?.type;
 
-    filterGraphByDepth(sigmaGraph, appSelectedNode?.id || null, depthFilter, visibleLabels);
-    sigma.refresh();
-  }, [visibleLabels, depthFilter, appSelectedNode, sigmaRef]);
+        return {
+          id:   n.id,
+          name: n.properties.name,
+          val:  n.label === 'Project'   ? 30 : n.label === 'Package'   ? 20 : n.label === 'Module'    ? 15
+              : n.label === 'Folder'    ? 10 : n.label === 'File'      ? 7  : n.label === 'Class'     ? 9
+              : n.label === 'Interface' ? 8  : n.label === 'Function'  ? 4  : n.label === 'Method'    ? 3  : 2,
+          color: nodeColor,
+          glow:  isBlast || isSelected || isCitation || isTool || isHighlit,
+          animationType,
+          raw:   n,
+        };
+      });
 
-  // Sync app selected node with sigma
-  useEffect(() => {
-    if (appSelectedNode) {
-      setSigmaSelectedNode(appSelectedNode.id);
-    } else {
-      setSigmaSelectedNode(null);
-    }
-  }, [appSelectedNode, setSigmaSelectedNode]);
+    const links: GraphLink[] = graph.relationships
+      // T007: empty set = show all
+      .filter(r => visibleEdgeSet.size === 0 || visibleEdgeSet.has(r.type))
+      .map(r => ({
+        source: r.sourceId,
+        target: r.targetId,
+        color:  EDGE_COLORS[r.type] ?? DEFAULT_EDGE_COLOR,
+      }));
 
-  // Focus on selected node
-  const handleFocusSelected = useCallback(() => {
-    if (appSelectedNode) {
-      focusNode(appSelectedNode.id);
-    }
-  }, [appSelectedNode, focusNode]);
+    setGraphData({ nodes, links });
+  }, [
+    graph,
+    appSelectedNode,
+    highlightedNodeIds,
+    blastRadiusNodeIds,
+    aiCitationHighlightedNodeIds,
+    aiToolHighlightedNodeIds,
+    isAIHighlightsEnabled,
+    visibleLabels,
+    visibleEdgeTypes,
+    animatedNodes,
+  ]);
 
-  // Clear selection
+  // Stable callback — reads only from node data already embedded in the GraphNode
+  const nodeThreeObject = useCallback((node: unknown) => buildNodeObject(node as GraphNode), []);
+
+  const handleNodeClick = useCallback((node: GraphNode) => {
+    if (!node?.raw) return;
+    setSelectedNode(node.raw);
+    openCodePanel();
+
+    const distance  = 60;
+    const dist      = Math.hypot(node.x ?? 0, node.y ?? 0, node.z ?? 0);
+    const distRatio = dist > 0 ? 1 + distance / dist : 2.5;
+    fgRef.current?.cameraPosition(
+      { x: (node.x ?? 0) * distRatio, y: (node.y ?? 0) * distRatio, z: (node.z ?? 0) * distRatio },
+      node as any,
+      1500,
+    );
+  }, [setSelectedNode, openCodePanel]);
+
+  useImperativeHandle(ref, () => ({
+    focusNode: (nodeId: string) => {
+      // ForceGraph3D のライブデータから位置を取得（シミュレーション後の x/y/z を持つ）
+      const liveNodes = (fgRef.current as any)?.graphData()?.nodes as GraphNode[] | undefined;
+      const node = liveNodes?.find((n: GraphNode) => n.id === nodeId);
+      if (node) handleNodeClick(node);
+    },
+  }), [handleNodeClick]);
+
+  // ---------------------------------------------------------------------------
+  // Overlay callbacks — passed down to GraphCanvasOverlay
+  // ---------------------------------------------------------------------------
+
   const handleClearSelection = useCallback(() => {
     setSelectedNode(null);
-    setSigmaSelectedNode(null);
-    resetZoom();
-  }, [setSelectedNode, setSigmaSelectedNode, resetZoom]);
+    setHighlightedNodeIds(new Set());
+  }, [setSelectedNode, setHighlightedNodeIds]);
+
+  const handleZoomIn = useCallback(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const pos = (fgRef.current as any)?.cameraPosition() as { x: number; y: number; z: number } | undefined;
+    if (pos) fgRef.current?.cameraPosition(
+      { x: pos.x * 0.8, y: pos.y * 0.8, z: pos.z * 0.8 }, undefined, 400,
+    );
+  }, []);
+
+  const handleZoomOut = useCallback(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const pos = (fgRef.current as any)?.cameraPosition() as { x: number; y: number; z: number } | undefined;
+    if (pos) fgRef.current?.cameraPosition(
+      { x: pos.x * 1.25, y: pos.y * 1.25, z: pos.z * 1.25 }, undefined, 400,
+    );
+  }, []);
+
+  const handleResetCamera = useCallback(() => {
+    fgRef.current?.cameraPosition({ x: 0, y: 0, z: 400 }, undefined, 800);
+  }, []);
+
+  const handleToggleAIHighlights = useCallback(() => {
+    // Clear manual highlights when turning off AI highlights
+    if (isAIHighlightsEnabled) setHighlightedNodeIds(new Set());
+    toggleAIHighlights();
+  }, [isAIHighlightsEnabled, setHighlightedNodeIds, toggleAIHighlights]);
 
   return (
-    <div className="relative w-full h-full bg-void">
-      {/* Background gradient */}
-      <div className="absolute inset-0 pointer-events-none">
-        <div
-          className="absolute inset-0"
-          style={{
-            background: `
-              radial-gradient(circle at 50% 50%, rgba(124, 58, 237, 0.03) 0%, transparent 70%),
-              linear-gradient(to bottom, #06060a, #0a0a10)
-            `
-          }}
-        />
-      </div>
-
-      {/* Sigma container */}
-      <div
-        ref={containerRef}
-        className="sigma-container w-full h-full cursor-grab active:cursor-grabbing"
+    <div className="relative w-full h-full bg-void overflow-hidden">
+      {/* 3D Force Graph — Phong shading + glow halos + directional particles */}
+      <ForceGraph3D
+        ref={fgRef as any}
+        graphData={graphData as any}
+        nodeId="id"
+        nodeLabel="name"
+        nodeColor="color"
+        nodeVal="val"
+        nodeThreeObject={nodeThreeObject as any}
+        linkColor="color"
+        backgroundColor="#06060a"
+        onNodeClick={handleNodeClick as any}
+        enableNodeDrag={false}
+        linkOpacity={0.6}
+        linkWidth={1.0}
+        warmupTicks={warmupTicks}
+        linkDirectionalParticles={2}
+        linkDirectionalParticleWidth={1.5}
+        linkDirectionalParticleSpeed={0.005}
+        linkDirectionalParticleColor="color"
       />
 
-      {/* Hovered node tooltip - only show when NOT selected */}
-      {hoveredNodeName && !sigmaSelectedNode && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 px-3 py-1.5 bg-elevated/95 border border-border-subtle rounded-lg backdrop-blur-sm z-20 pointer-events-none animate-fade-in">
-          <span className="font-mono text-sm text-text-primary">{hoveredNodeName}</span>
-        </div>
-      )}
-
-      {/* Selection info bar */}
-      {sigmaSelectedNode && appSelectedNode && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-2 px-4 py-2 bg-accent/20 border border-accent/30 rounded-xl backdrop-blur-sm z-20 animate-slide-up">
-          <div className="w-2 h-2 bg-accent rounded-full animate-pulse" />
-          <span className="font-mono text-sm text-text-primary">
-            {appSelectedNode.properties.name}
-          </span>
-          <span className="text-xs text-text-muted">
-            ({appSelectedNode.label})
-          </span>
-          <button
-            onClick={handleClearSelection}
-            className="ml-2 px-2 py-0.5 text-xs text-text-secondary hover:text-text-primary hover:bg-white/10 rounded transition-colors"
-          >
-            Clear
-          </button>
-        </div>
-      )}
-
-      {/* Graph Controls - Bottom Right */}
-      <div className="absolute bottom-4 right-4 flex flex-col gap-1 z-10">
-        <button
-          onClick={zoomIn}
-          className="w-9 h-9 flex items-center justify-center bg-elevated border border-border-subtle rounded-md text-text-secondary hover:bg-hover hover:text-text-primary transition-colors"
-          title="Zoom In"
-        >
-          <ZoomIn className="w-4 h-4" />
-        </button>
-        <button
-          onClick={zoomOut}
-          className="w-9 h-9 flex items-center justify-center bg-elevated border border-border-subtle rounded-md text-text-secondary hover:bg-hover hover:text-text-primary transition-colors"
-          title="Zoom Out"
-        >
-          <ZoomOut className="w-4 h-4" />
-        </button>
-        <button
-          onClick={resetZoom}
-          className="w-9 h-9 flex items-center justify-center bg-elevated border border-border-subtle rounded-md text-text-secondary hover:bg-hover hover:text-text-primary transition-colors"
-          title="Fit to Screen"
-        >
-          <Maximize2 className="w-4 h-4" />
-        </button>
-
-        {/* Divider */}
-        <div className="h-px bg-border-subtle my-1" />
-
-        {/* Focus on selected */}
-        {appSelectedNode && (
-          <button
-            onClick={handleFocusSelected}
-            className="w-9 h-9 flex items-center justify-center bg-accent/20 border border-accent/30 rounded-md text-accent hover:bg-accent/30 transition-colors"
-            title="Focus on Selected Node"
-          >
-            <Focus className="w-4 h-4" />
-          </button>
-        )}
-
-        {/* Clear selection */}
-        {sigmaSelectedNode && (
-          <button
-            onClick={handleClearSelection}
-            className="w-9 h-9 flex items-center justify-center bg-elevated border border-border-subtle rounded-md text-text-secondary hover:bg-hover hover:text-text-primary transition-colors"
-            title="Clear Selection"
-          >
-            <RotateCcw className="w-4 h-4" />
-          </button>
-        )}
-
-        {/* Divider */}
-        <div className="h-px bg-border-subtle my-1" />
-
-        {/* Layout control */}
-        <button
-          onClick={isLayoutRunning ? stopLayout : startLayout}
-          className={`
-            w-9 h-9 flex items-center justify-center border rounded-md transition-all
-            ${isLayoutRunning
-              ? 'bg-accent border-accent text-white shadow-glow animate-pulse'
-              : 'bg-elevated border-border-subtle text-text-secondary hover:bg-hover hover:text-text-primary'
-            }
-          `}
-          title={isLayoutRunning ? 'Stop Layout' : 'Run Layout Again'}
-        >
-          {isLayoutRunning ? (
-            <Pause className="w-4 h-4" />
-          ) : (
-            <Play className="w-4 h-4" />
-          )}
-        </button>
-      </div>
-
-      {/* Layout running indicator */}
-      {isLayoutRunning && (
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 px-3 py-1.5 bg-emerald-500/20 border border-emerald-500/30 rounded-full backdrop-blur-sm z-10 animate-fade-in">
-          <div className="w-2 h-2 bg-emerald-400 rounded-full animate-ping" />
-          <span className="text-xs text-emerald-400 font-medium">Layout optimizing...</span>
-        </div>
-      )}
-
-      {/* Query FAB */}
-      <QueryFAB />
-
-      {/* AI Highlights toggle - Top Right */}
-      <div className="absolute top-4 right-4 z-20">
-        <button
-          onClick={() => {
-            // If turning off, also clear process highlights
-            if (isAIHighlightsEnabled) {
-              setHighlightedNodeIds(new Set());
-            }
-            toggleAIHighlights();
-          }}
-          className={
-            isAIHighlightsEnabled
-              ? 'w-10 h-10 flex items-center justify-center bg-cyan-500/15 border border-cyan-400/40 rounded-lg text-cyan-200 hover:bg-cyan-500/20 hover:border-cyan-300/60 transition-colors'
-              : 'w-10 h-10 flex items-center justify-center bg-elevated border border-border-subtle rounded-lg text-text-muted hover:bg-hover hover:text-text-primary transition-colors'
-          }
-          title={isAIHighlightsEnabled ? 'Turn off all highlights' : 'Turn on AI highlights'}
-        >
-          {isAIHighlightsEnabled ? <Lightbulb className="w-4 h-4" /> : <LightbulbOff className="w-4 h-4" />}
-        </button>
-      </div>
+      {/* All overlay UI delegated to GraphCanvasOverlay (T006) */}
+      <GraphCanvasOverlay
+        selectedNode={appSelectedNode}
+        onClearSelection={handleClearSelection}
+        isAIHighlightsEnabled={isAIHighlightsEnabled}
+        onToggleAIHighlights={handleToggleAIHighlights}
+        onZoomIn={handleZoomIn}
+        onZoomOut={handleZoomOut}
+        onResetCamera={handleResetCamera}
+      />
     </div>
   );
 });

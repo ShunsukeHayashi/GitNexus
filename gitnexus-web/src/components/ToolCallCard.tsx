@@ -8,11 +8,14 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronRight, Sparkles, Check, Loader2, AlertCircle } from 'lucide-react';
 import type { ToolCallInfo } from '../core/llm/types';
+import { DiffViewer } from './DiffViewer';
 
 interface ToolCallCardProps {
   toolCall: ToolCallInfo;
   /** Start expanded (useful for in-progress calls) */
   defaultExpanded?: boolean;
+  /** Called when the user accepts a suggest-tool diff proposal */
+  onSuggestAccept?: (filePath: string, startLine: number, endLine: number, replacement: string) => void;
 }
 
 /**
@@ -84,18 +87,19 @@ const getStatusDisplay = (status: ToolCallInfo['status']) => {
 const getToolDisplayName = (name: string): string => {
   const names: Record<string, string> = {
     // Current 7-tool architecture
-    'search': '🔍 Search Code',
-    'cypher': '🔗 Cypher Query',
-    'grep': '🔎 Pattern Search',
-    'read': '📄 Read File',
-    'overview': '🗺️ Codebase Overview',
+    'search':  '🔍 Search Code',
+    'cypher':  '🔗 Cypher Query',
+    'grep':    '🔎 Pattern Search',
+    'read':    '📄 Read File',
+    'overview':'🗺️ Codebase Overview',
     'explore': '🔬 Deep Dive',
-    'impact': '💥 Impact Analysis',
+    'impact':  '💥 Impact Analysis',
+    'suggest': '✏️ Suggest Change',
   };
   return names[name] || name;
 };
 
-export const ToolCallCard = ({ toolCall, defaultExpanded = false }: ToolCallCardProps) => {
+export const ToolCallCard = ({ toolCall, defaultExpanded = false, onSuggestAccept }: ToolCallCardProps) => {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const status = getStatusDisplay(toolCall.status);
   const formattedArgs = formatArgs(toolCall.args);
@@ -142,21 +146,27 @@ export const ToolCallCard = ({ toolCall, defaultExpanded = false }: ToolCallCard
             </div>
           )}
 
-          {/* Result */}
+          {/* Result — DiffViewer for suggest, raw pre for everything else */}
           {toolCall.result && (
-            <div className="px-3 py-2">
-              <div className="text-[10px] uppercase tracking-wider text-text-muted mb-1.5">
-                Result
+            toolCall.name === 'suggest' && toolCall.status === 'completed' ? (
+              <div className="px-3 py-2">
+                <DiffViewer toolCall={toolCall} onAccept={onSuggestAccept} />
               </div>
-              <div className="max-h-[400px] overflow-y-auto bg-surface/50 rounded">
-                <pre className="text-xs text-text-secondary p-2 whitespace-pre-wrap font-mono">
-                  {toolCall.result.length > 3000
-                    ? toolCall.result.slice(0, 3000) + '\n\n... (truncated)'
-                    : toolCall.result
-                  }
-                </pre>
+            ) : (
+              <div className="px-3 py-2">
+                <div className="text-[10px] uppercase tracking-wider text-text-muted mb-1.5">
+                  Result
+                </div>
+                <div className="max-h-[400px] overflow-y-auto bg-surface/50 rounded">
+                  <pre className="text-xs text-text-secondary p-2 whitespace-pre-wrap font-mono">
+                    {toolCall.result.length > 3000
+                      ? toolCall.result.slice(0, 3000) + '\n\n... (truncated)'
+                      : toolCall.result
+                    }
+                  </pre>
+                </div>
               </div>
-            </div>
+            )
           )}
 
           {/* Loading state for in-progress */}

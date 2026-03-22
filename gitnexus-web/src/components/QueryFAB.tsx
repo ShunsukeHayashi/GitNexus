@@ -172,7 +172,7 @@ export const QueryFAB = () => {
         className="
           group absolute bottom-4 left-4 z-20
           flex items-center gap-2 px-4 py-2.5
-          bg-gradient-to-r from-cyan-500 to-teal-500
+          bg-black
           rounded-xl text-white font-medium text-sm
           shadow-[0_0_20px_rgba(6,182,212,0.4)]
           hover:shadow-[0_0_30px_rgba(6,182,212,0.6)]
@@ -210,7 +210,7 @@ export const QueryFAB = () => {
     >
       <div className="flex items-center justify-between px-4 py-3 border-b border-border-subtle">
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 flex items-center justify-center bg-gradient-to-br from-cyan-500 to-teal-500 rounded-lg">
+          <div className="w-7 h-7 flex items-center justify-center bg-black rounded-lg">
             <Terminal className="w-4 h-4 text-white" />
           </div>
           <span className="font-medium text-sm">Cypher Query</span>
@@ -305,7 +305,7 @@ export const QueryFAB = () => {
               disabled={!query.trim() || isRunning}
               className="
                 flex items-center gap-1.5 px-4 py-1.5
-                bg-gradient-to-r from-cyan-500 to-teal-500
+                bg-black
                 rounded-md text-white text-sm font-medium
                 shadow-[0_0_15px_rgba(6,182,212,0.3)]
                 hover:shadow-[0_0_20px_rgba(6,182,212,0.5)]

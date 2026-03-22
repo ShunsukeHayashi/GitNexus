@@ -356,3 +356,88 @@ export const fetchOpenRouterModels = async (): Promise<Array<{ id: string; name:
   }
 };
 
+
+
+// ============================================================================
+// CHAT HISTORY PERSISTENCE
+// ============================================================================
+
+const CHAT_STORAGE_PREFIX = 'gitnexus-chat-';
+const MAX_STORED_MESSAGES = 50;
+
+export interface StoredMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: number;
+}
+
+/**
+ * Save chat history for a project to localStorage.
+ * Keeps only the last MAX_STORED_MESSAGES to avoid quota issues.
+ */
+export const saveChatHistory = (projectName: string, messages: StoredMessage[]): void => {
+  try {
+    const key = `${CHAT_STORAGE_PREFIX}${projectName}`;
+    const trimmed = messages.slice(-MAX_STORED_MESSAGES);
+    localStorage.setItem(key, JSON.stringify(trimmed));
+  } catch (error) {
+    // localStorage quota exceeded — silently drop oldest messages
+    if (error instanceof DOMException && error.name === 'QuotaExceededError') {
+      try {
+        const key = `${CHAT_STORAGE_PREFIX}${projectName}`;
+        const trimmed = messages.slice(-Math.floor(MAX_STORED_MESSAGES / 2));
+        localStorage.setItem(key, JSON.stringify(trimmed));
+      } catch {
+        // Give up silently — chat persistence is best-effort
+      }
+    }
+  }
+};
+
+/**
+ * Load chat history for a project from localStorage.
+ * Returns empty array if no history found or on error.
+ */
+export const loadChatHistory = (projectName: string): StoredMessage[] => {
+  try {
+    const key = `${CHAT_STORAGE_PREFIX}${projectName}`;
+    const stored = localStorage.getItem(key);
+    if (!stored) return [];
+    
+    const parsed = JSON.parse(stored);
+    if (!Array.isArray(parsed)) return [];
+    
+    // Validate structure
+    return parsed.filter(
+      (msg: any) =>
+        msg &&
+        typeof msg.role === 'string' &&
+        typeof msg.content === 'string' &&
+        (msg.role === 'user' || msg.role === 'assistant')
+    );
+  } catch {
+    return [];
+  }
+};
+
+/**
+ * Clear chat history for a specific project.
+ */
+export const clearChatHistory = (projectName: string): void => {
+  const key = `${CHAT_STORAGE_PREFIX}${projectName}`;
+  localStorage.removeItem(key);
+};
+
+/**
+ * List all projects with stored chat history.
+ */
+export const listChatProjects = (): string[] => {
+  const projects: string[] = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key?.startsWith(CHAT_STORAGE_PREFIX)) {
+      projects.push(key.slice(CHAT_STORAGE_PREFIX.length));
+    }
+  }
+  return projects;
+};

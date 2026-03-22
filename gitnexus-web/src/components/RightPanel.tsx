@@ -13,6 +13,7 @@ export const RightPanel = () => {
     isRightPanelOpen,
     setRightPanelOpen,
     fileContents,
+    setFileContents,
     graph,
     addCodeReference,
     // LLM / chat state
@@ -60,6 +61,27 @@ export const RightPanel = () => {
     }
     return best?.path ?? null;
   }, [fileContents]);
+
+  // T008: Accept a suggest-tool diff proposal — patches the in-memory fileContents
+  const handleSuggestAccept = useCallback((
+    filePath: string,
+    startLine: number,
+    endLine: number,
+    replacement: string,
+  ) => {
+    const resolvedPath = resolveFilePathForUI(filePath) ?? filePath;
+    const current = fileContents.get(resolvedPath) ?? '';
+    const lines = current.split('\n');
+    // startLine / endLine are 1-indexed (from the suggest tool schema)
+    const patched = [
+      ...lines.slice(0, startLine - 1),
+      ...replacement.split('\n'),
+      ...lines.slice(endLine),
+    ].join('\n');
+    const next = new Map(fileContents);
+    next.set(resolvedPath, patched);
+    setFileContents(next);
+  }, [fileContents, resolveFilePathForUI, setFileContents]);
 
   const findFileNodeIdForUI = useCallback((filePath: string): string | undefined => {
     if (!graph) return undefined;
@@ -208,16 +230,16 @@ export const RightPanel = () => {
   if (!isRightPanelOpen) return null;
 
   return (
-    <aside className="w-[40%] min-w-[400px] max-w-[600px] flex flex-col bg-deep border-l border-border-subtle animate-slide-in relative z-30 flex-shrink-0">
+    <aside className="w-[40%] min-w-[400px] max-w-[600px] flex flex-col bg-white border-l border-gray-200 animate-slide-in relative z-30 flex-shrink-0">
       {/* Header with Tabs */}
-      <div className="flex items-center justify-between px-4 py-2 bg-surface border-b border-border-subtle">
+      <div className="flex items-center justify-between px-4 py-2 bg-gray-50 border-b border-gray-200">
         <div className="flex items-center gap-1">
           {/* Chat Tab */}
           <button
             onClick={() => setActiveTab('chat')}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${activeTab === 'chat'
-              ? 'bg-accent/15 text-accent'
-              : 'text-text-muted hover:text-text-primary hover:bg-hover'
+              ? 'bg-gray-100 text-black font-semibold'
+              : 'text-gray-400 hover:text-gray-900 hover:bg-gray-100'
               }`}
           >
             <Sparkles className="w-3.5 h-3.5" />
@@ -228,8 +250,8 @@ export const RightPanel = () => {
           <button
             onClick={() => setActiveTab('processes')}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${activeTab === 'processes'
-              ? 'bg-accent/15 text-accent'
-              : 'text-text-muted hover:text-text-primary hover:bg-hover'
+              ? 'bg-gray-100 text-black font-semibold'
+              : 'text-gray-400 hover:text-gray-900 hover:bg-gray-100'
               }`}
           >
             <GitBranch className="w-3.5 h-3.5" />
@@ -243,7 +265,7 @@ export const RightPanel = () => {
         {/* Close button */}
         <button
           onClick={() => setRightPanelOpen(false)}
-          className="p-1.5 text-text-muted hover:text-text-primary hover:bg-hover rounded transition-colors"
+          className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
           title="Close Panel"
         >
           <PanelRightClose className="w-4 h-4" />
@@ -261,7 +283,7 @@ export const RightPanel = () => {
       {activeTab === 'chat' && (
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Status bar */}
-          <div className="flex items-center gap-2.5 px-4 py-3 bg-elevated/50 border-b border-border-subtle">
+          <div className="flex items-center gap-2.5 px-4 py-3 bg-white/50 border-b border-gray-200">
             <div className="ml-auto flex items-center gap-2">
               {!isAgentReady && (
                 <span className="text-[11px] px-2 py-1 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30">
@@ -269,7 +291,7 @@ export const RightPanel = () => {
                 </span>
               )}
               {isAgentInitializing && (
-                <span className="text-[11px] px-2 py-1 rounded-full bg-surface border border-border-subtle flex items-center gap-1 text-text-muted">
+                <span className="text-[11px] px-2 py-1 rounded-full bg-gray-50 border border-gray-200 flex items-center gap-1 text-gray-400">
                   <Loader2 className="w-3 h-3 animate-spin" /> Connecting
                 </span>
               )}
@@ -290,13 +312,13 @@ export const RightPanel = () => {
           <div className="flex-1 overflow-y-auto p-4 scrollbar-thin">
             {chatMessages.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-center px-4">
-                <div className="w-14 h-14 mb-4 flex items-center justify-center bg-gradient-to-br from-accent to-node-interface rounded-xl shadow-glow text-2xl">
+                <div className="w-14 h-14 mb-4 flex items-center justify-center bg-black rounded-xl shadow-glow text-2xl">
                   🧠
                 </div>
                 <h3 className="text-base font-medium mb-2">
                   Ask me anything
                 </h3>
-                <p className="text-sm text-text-secondary leading-relaxed mb-5">
+                <p className="text-sm text-gray-600 leading-relaxed mb-5">
                   I can help you understand the architecture, find functions, or explain connections.
                 </p>
                 <div className="flex flex-wrap gap-2 justify-center">
@@ -304,7 +326,7 @@ export const RightPanel = () => {
                     <button
                       key={suggestion}
                       onClick={() => setChatInput(suggestion)}
-                      className="px-3 py-1.5 bg-elevated border border-border-subtle rounded-full text-xs text-text-secondary hover:border-accent hover:text-text-primary transition-colors"
+                      className="px-3 py-1.5 bg-white border border-gray-200 rounded-full text-xs text-gray-600 hover:border-accent hover:text-gray-900 transition-colors"
                     >
                       {suggestion}
                     </button>
@@ -322,10 +344,10 @@ export const RightPanel = () => {
                     {message.role === 'user' && (
                       <div className="mb-4">
                         <div className="flex items-center gap-2 mb-2">
-                          <User className="w-4 h-4 text-text-muted" />
-                          <span className="text-xs font-medium text-text-muted uppercase tracking-wide">You</span>
+                          <User className="w-4 h-4 text-gray-400" />
+                          <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">You</span>
                         </div>
-                        <div className="pl-6 text-sm text-text-primary">
+                        <div className="pl-6 text-sm text-gray-900">
                           {message.content}
                         </div>
                       </div>
@@ -335,10 +357,10 @@ export const RightPanel = () => {
                     {message.role === 'assistant' && (
                       <div>
                         <div className="flex items-center gap-2 mb-3">
-                          <Sparkles className="w-4 h-4 text-accent" />
-                          <span className="text-xs font-medium text-text-muted uppercase tracking-wide">Nexus AI</span>
+                          <Sparkles className="w-4 h-4 text-black" />
+                          <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">Nexus AI</span>
                           {isChatLoading && message === chatMessages[chatMessages.length - 1] && (
-                            <Loader2 className="w-3 h-3 animate-spin text-accent" />
+                            <Loader2 className="w-3 h-3 animate-spin text-black" />
                           )}
                         </div>
                         <div className="pl-6 chat-prose">
@@ -348,7 +370,7 @@ export const RightPanel = () => {
                               {message.steps.map((step, index) => (
                                 <div key={step.id}>
                                   {step.type === 'reasoning' && step.content && (
-                                    <div className="text-text-secondary text-sm italic border-l-2 border-text-muted/30 pl-3 mb-3">
+                                    <div className="text-gray-600 text-sm italic border-l-2 border-text-muted/30 pl-3 mb-3">
                                       <MarkdownRenderer
                                         content={step.content}
                                         onLinkClick={handleLinkClick}
@@ -357,7 +379,11 @@ export const RightPanel = () => {
                                   )}
                                   {step.type === 'tool_call' && step.toolCall && (
                                     <div className="mb-3">
-                                      <ToolCallCard toolCall={step.toolCall} defaultExpanded={false} />
+                                      <ToolCallCard
+                                        toolCall={step.toolCall}
+                                        defaultExpanded={false}
+                                        onSuggestAccept={handleSuggestAccept}
+                                      />
                                     </div>
                                   )}
                                   {step.type === 'content' && step.content && (
@@ -393,8 +419,8 @@ export const RightPanel = () => {
           </div>
 
           {/* Input */}
-          <div className="p-3 bg-surface border-t border-border-subtle">
-            <div className="flex items-end gap-2 px-3 py-2 bg-elevated border border-border-subtle rounded-xl transition-all focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/20">
+          <div className="p-3 bg-gray-50 border-t border-gray-200">
+            <div className="flex items-end gap-2 px-3 py-2 bg-white border border-gray-200 rounded-xl transition-all focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/20">
               <textarea
                 ref={textareaRef}
                 value={chatInput}
@@ -402,12 +428,12 @@ export const RightPanel = () => {
                 onKeyDown={handleKeyDown}
                 placeholder="Ask about the codebase..."
                 rows={1}
-                className="flex-1 bg-transparent border-none outline-none text-sm text-text-primary placeholder:text-text-muted resize-none min-h-[36px] scrollbar-thin"
+                className="flex-1 bg-transparent border-none outline-none text-sm text-gray-900 placeholder:text-gray-400 resize-none min-h-[36px] scrollbar-thin"
                 style={{ height: '36px', overflowY: 'hidden' }}
               />
               <button
                 onClick={clearChat}
-                className="px-2 py-1 text-xs text-text-muted hover:text-text-primary transition-colors"
+                className="px-2 py-1 text-xs text-gray-400 hover:text-gray-900 transition-colors"
                 title="Clear chat"
               >
                 Clear
@@ -424,7 +450,7 @@ export const RightPanel = () => {
                 <button
                   onClick={handleSendMessage}
                   disabled={!chatInput.trim() || isAgentInitializing}
-                  className="w-9 h-9 flex items-center justify-center bg-accent rounded-md text-white transition-all hover:bg-accent-dim disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-9 h-9 flex items-center justify-center bg-black rounded-md text-white transition-all hover:bg-black-dim disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Send className="w-3.5 h-3.5" />
                 </button>

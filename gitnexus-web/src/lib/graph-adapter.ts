@@ -276,24 +276,24 @@ export const knowledgeGraphToGraphology = (
   // Add edges with distinct colors per relationship type
   const edgeBaseSize = nodeCount > 20000 ? 0.4 : nodeCount > 5000 ? 0.6 : 1.0;
   
-  // Edge styles - each relationship type has a DISTINCT color for clarity
-  // Using varied hues so relationships are easily distinguishable
+  // Edge styles - vivid/bright colors for dark canvas background (#06060a)
+  // Each relationship type has a DISTINCT bright color for easy identification
   const EDGE_STYLES: Record<string, { color: string; sizeMultiplier: number }> = {
-    // STRUCTURAL - Greens (folder/file hierarchy)
-    CONTAINS: { color: '#2d5a3d', sizeMultiplier: 0.4 },    // Forest green - folder contains
-    
-    // DEFINITIONS - Cyan/Teal (code definitions)
-    DEFINES: { color: '#0e7490', sizeMultiplier: 0.5 },     // Cyan - file defines function/class
-    
-    // DEPENDENCIES - Blue (imports between files)  
-    IMPORTS: { color: '#1d4ed8', sizeMultiplier: 0.6 },     // Blue - file imports file
-    
-    // FUNCTION FLOW - Purple (call graph)
-    CALLS: { color: '#7c3aed', sizeMultiplier: 0.8 },       // Violet - function calls
-    
-    // TYPE RELATIONSHIPS - Warm colors (OOP)
-    EXTENDS: { color: '#c2410c', sizeMultiplier: 1.0 },     // Orange - extension
-    IMPLEMENTS: { color: '#be185d', sizeMultiplier: 0.9 },  // Pink - interface implementation
+    // STRUCTURAL - Bright green (folder/file hierarchy)
+    CONTAINS: { color: '#22c55e', sizeMultiplier: 0.5 },    // Bright green - folder contains
+
+    // DEFINITIONS - Bright cyan (code definitions)
+    DEFINES: { color: '#06b6d4', sizeMultiplier: 0.6 },     // Bright cyan - file defines function/class
+
+    // DEPENDENCIES - Bright blue (imports between files)
+    IMPORTS: { color: '#60a5fa', sizeMultiplier: 0.7 },     // Bright sky blue - file imports file
+
+    // FUNCTION FLOW - Bright violet (call graph)
+    CALLS: { color: '#c084fc', sizeMultiplier: 0.9 },       // Bright violet - function calls
+
+    // TYPE RELATIONSHIPS - Warm bright colors (OOP)
+    EXTENDS: { color: '#fb923c', sizeMultiplier: 1.1 },     // Bright orange - extension
+    IMPLEMENTS: { color: '#f472b6', sizeMultiplier: 1.0 },  // Bright pink - interface implementation
   };
   
   knowledgeGraph.relationships.forEach((rel) => {

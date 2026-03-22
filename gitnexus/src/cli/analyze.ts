@@ -46,10 +46,14 @@ function ensureHeap(): boolean {
 export interface AnalyzeOptions {
   force?: boolean;
   embeddings?: boolean;
+  /** Skip the 50 000-node safety cap for embedding generation. Use with caution on large repos. */
+  skipEmbeddingLimit?: boolean;
   skills?: boolean;
   verbose?: boolean;
   /** Index the folder even when no .git directory is present. */
   skipGit?: boolean;
+  /** Skip CLAUDE.md, AGENTS.md, and .claude/skills generation. */
+  skipAiContext?: boolean;
 }
 
 /** Threshold: auto-skip embeddings for repos with more nodes than this */
@@ -281,8 +285,8 @@ export const analyzeCommand = async (
   let embeddingSkipReason = 'off (use --embeddings to enable)';
 
   if (options?.embeddings) {
-    if (stats.nodes > EMBEDDING_NODE_LIMIT) {
-      embeddingSkipReason = `skipped (${stats.nodes.toLocaleString()} nodes > ${EMBEDDING_NODE_LIMIT.toLocaleString()} limit)`;
+    if (!options?.skipEmbeddingLimit && stats.nodes > EMBEDDING_NODE_LIMIT) {
+      embeddingSkipReason = `skipped (${stats.nodes.toLocaleString()} nodes > ${EMBEDDING_NODE_LIMIT.toLocaleString()} limit — use --skip-embedding-limit to override)`;
     } else {
       embeddingSkipped = false;
     }
@@ -356,14 +360,17 @@ export const analyzeCommand = async (
     generatedSkills = skillResult.skills;
   }
 
-  const aiContext = await generateAIContextFiles(repoPath, storagePath, projectName, {
-    files: pipelineResult.totalFileCount,
-    nodes: stats.nodes,
-    edges: stats.edges,
-    communities: pipelineResult.communityResult?.stats.totalCommunities,
-    clusters: aggregatedClusterCount,
-    processes: pipelineResult.processResult?.stats.totalProcesses,
-  }, generatedSkills);
+  let aiContext: { files: string[] } = { files: [] };
+  if (!options?.skipAiContext) {
+    aiContext = await generateAIContextFiles(repoPath, storagePath, projectName, {
+      files: pipelineResult.totalFileCount,
+      nodes: stats.nodes,
+      edges: stats.edges,
+      communities: pipelineResult.communityResult?.stats.totalCommunities,
+      clusters: aggregatedClusterCount,
+      processes: pipelineResult.processResult?.stats.totalProcesses,
+    }, generatedSkills);
+  }
 
   await closeLbug();
   // Note: we intentionally do NOT call disposeEmbedder() here.

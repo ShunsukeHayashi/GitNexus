@@ -1,5 +1,5 @@
 {
-  "name": "gitnexus",
+  "name": "@miyabi-ai/nexus",
   "version": "1.4.7",
   "description": "Graph-powered code intelligence for AI agents. Index any codebase, query via MCP or CLI.",
   "author": "Abhigyan Patwari",
@@ -28,7 +28,7 @@
   ],
   "type": "module",
   "bin": {
-    "gitnexus": "dist/cli/index.js"
+    "miyabi-nexus": "dist/cli/index.js"
   },
   "files": [
     "dist",
