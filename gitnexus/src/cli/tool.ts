@@ -107,6 +107,7 @@ export async function impactCommand(target: string, options?: {
   repo?: string;
   depth?: string;
   includeTests?: boolean;
+  limit?: string;
 }): Promise<void> {
   if (!target?.trim()) {
     console.error('Usage: gitnexus impact <symbol_name> [--direction upstream|downstream]');

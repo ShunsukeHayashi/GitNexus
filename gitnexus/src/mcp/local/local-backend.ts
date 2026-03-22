@@ -1431,6 +1431,7 @@ export class LocalBackend {
     relationTypes?: string[];
     includeTests?: boolean;
     minConfidence?: number;
+    limit?: number;
   }): Promise<any> {
     await this.ensureInitialized(repo.id);
     
@@ -1513,10 +1514,20 @@ export class LocalBackend {
       frontier = nextFrontier;
     }
     
+    const perDepthLimit = params.limit ?? Infinity;
     const grouped: Record<number, any[]> = {};
+    const truncated: Record<number, number> = {};
     for (const item of impacted) {
       if (!grouped[item.depth]) grouped[item.depth] = [];
       grouped[item.depth].push(item);
+    }
+    // Apply per-depth limit
+    for (const [depth, items] of Object.entries(grouped)) {
+      const d = Number(depth);
+      if (items.length > perDepthLimit) {
+        truncated[d] = items.length - perDepthLimit;
+        grouped[d] = items.slice(0, perDepthLimit);
+      }
     }
 
     // ── Enrichment: affected processes, modules, risk ──────────────

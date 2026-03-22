@@ -107,6 +107,7 @@ program
   .option('-r, --repo <name>', 'Target repository')
   .option('--depth <n>', 'Max relationship depth (default: 3)')
   .option('--include-tests', 'Include test files in results')
+  .option('-l, --limit <n>', 'Max symbols per depth level (default: no limit)')
   .action(createLazyAction(() => import('./tool.js'), 'impactCommand'));
 
 program
