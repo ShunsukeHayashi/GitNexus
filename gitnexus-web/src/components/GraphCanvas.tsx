@@ -14,7 +14,7 @@ import {
   buildNodeObject, getRepoColor,
 } from '../lib/graphNodeUtils';
 import { GraphCanvasOverlay } from './GraphCanvasOverlay';
-import type { UserPresence } from '../core/graph/types';
+import type { UserPresence, ActiveAgentWork } from '../core/graph/types';
 
 export interface GraphCanvasHandle {
   focusNode: (nodeId: string) => void;
@@ -60,9 +60,11 @@ function buildCrossRepoLinkObject(link: GraphLink): THREE.Object3D {
 export interface GraphCanvasProps {
   /** T023: list of currently active presence users from usePresence() hook */
   presenceUsers?: UserPresence[];
+  /** T025: active agent work entries from useActiveAgents hook */
+  activeAgents?: ActiveAgentWork[];
 }
 
-export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(({ presenceUsers }, ref) => {
+export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(({ presenceUsers, activeAgents = [] }, ref) => {
   const {
     graph,
     setSelectedNode,
@@ -261,38 +263,36 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(({ pr
     fg.d3ReheatSimulation();
   }, [graphData]);
 
-    const nodeThreeObject = useCallback((node: unknown) => {
-    const gn = node as GraphNode;
-    const baseObject = buildNodeObject(gn);
-    
-    // Agent Radar: Golden Aura for locked nodes
-    const isLocked = swarmLocks.find(l => l.file === gn.id || (gn.filePath && l.file === gn.filePath));
-    if (isLocked) {
-      const geometry = new THREE.SphereGeometry(6, 16, 16);
-      const material = new THREE.MeshBasicMaterial({ color: 0xffd700, transparent: true, opacity: 0.4 });
-      const aura = new THREE.Mesh(geometry, material);
-      
-      // Text badge for agent name
-      const canvas = document.createElement('canvas');
-      canvas.width = 256; canvas.height = 64;
-      const context = canvas.getContext('2d');
-      if (context) {
-        context.font = 'Bold 24px Arial';
-        context.fillStyle = '#ff9900';
-        context.textAlign = 'center';
-        context.fillText(isLocked.agent, 128, 40);
-        const tex = new THREE.CanvasTexture(canvas);
-        const spriteMat = new THREE.SpriteMaterial({ map: tex, transparent: true });
-        const sprite = new THREE.Sprite(spriteMat);
-        sprite.scale.set(20, 5, 1);
-        sprite.position.y = 8;
-        aura.add(sprite);
-      }
-      
-      baseObject.add(aura);
+  // T025: Build nodeId → agentName[] map from both sources:
+  //   1. activeAgents prop (node-ID heartbeat via /api/agents/active)
+  //   2. swarmLocks (file-level locks from swarm-lock CLI via /api/swarm-state)
+  const activeAgentNames = useMemo(() => {
+    const map = new Map<string, string[]>();
+    // Source 1: heartbeat-based node locks
+    for (const a of activeAgents) {
+      const arr = map.get(a.nodeId) ?? [];
+      arr.push(a.agentId);
+      map.set(a.nodeId, arr);
     }
-    return baseObject;
-  }, [swarmLocks]);
+    return map;
+  }, [activeAgents]);
+
+  const nodeThreeObject = useCallback(
+    (node: unknown) => {
+      const n = node as GraphNode;
+      // Source 2: swarm-lock file-level agents — match via raw filePath property
+      const filePath = (n.raw as any)?.properties?.filePath as string | undefined;
+      const swarmAgents = filePath
+        ? swarmLocks
+            .filter(l => filePath.endsWith(l.file) || l.file.endsWith(filePath))
+            .map(l => l.agent)
+        : [];
+      const heartbeatAgents = activeAgentNames.get(n.id) ?? [];
+      const allAgents = [...new Set([...heartbeatAgents, ...swarmAgents])];
+      return buildNodeObject(n, allAgents.length > 0 ? allAgents : undefined);
+    },
+    [activeAgentNames, swarmLocks],
+  );
 
   // ---------------------------------------------------------------------------
   // T012: CROSS_REPO_CALL dashed-line Three.js object.
@@ -424,6 +424,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(({ pr
         onResetCamera={handleResetCamera}
         presenceUsers={presenceUsers}
         repoNames={repoNames}
+        activeAgents={activeAgents}
       />
     </div>
   );

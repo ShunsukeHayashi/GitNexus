@@ -22,8 +22,9 @@ import {
   BLAST_COLOR,
   CROSS_REPO_EDGE_COLOR,
   getRepoColor,
+  AGENT_AURA_COLOR,
 } from '../lib/graphNodeUtils';
-import type { UserPresence } from '../core/graph/types';
+import type { UserPresence, ActiveAgentWork } from '../core/graph/types';
 
 /** Maximum number of presence users shown inline; excess shown as "+N more". */
 const MAX_PRESENCE_DISPLAYED = 5;
@@ -46,6 +47,8 @@ export interface GraphCanvasOverlayProps {
   presenceUsers?:       UserPresence[];
   /** T012: set of distinct repoNames present in the current graph (may be empty) */
   repoNames?:           Set<string>;
+  /** T025: active agent work entries — used to display counter in the legend */
+  activeAgents?:        ActiveAgentWork[];
 }
 
 export function GraphCanvasOverlay({
@@ -58,6 +61,7 @@ export function GraphCanvasOverlay({
   onResetCamera,
   presenceUsers,
   repoNames,
+  activeAgents = [],
 }: GraphCanvasOverlayProps) {
   // T023: Only show users who have a focused node (most useful to display)
   const focusedUsers = (presenceUsers ?? []).filter(u => !!u.focusedNodeId);
@@ -243,6 +247,35 @@ export function GraphCanvasOverlay({
                   />
                   <span className="text-xs text-white/60 truncate max-w-[120px]" title={repo}>
                     {repo}
+                  </span>
+                </div>
+              ))}
+            </>
+          )}
+
+          {/* T025: Active AI Agent counter — only shown when agents are present */}
+          {activeAgents.length > 0 && (
+            <>
+              <div className="border-t border-white/10 my-1" />
+              <div className="flex items-center gap-2">
+                <div
+                  className="w-2.5 h-2.5 rounded-full flex-shrink-0 animate-pulse"
+                  style={{ backgroundColor: AGENT_AURA_COLOR }}
+                />
+                <span className="text-xs font-medium" style={{ color: AGENT_AURA_COLOR }}>
+                  Active Agents: {activeAgents.length}
+                </span>
+              </div>
+              {activeAgents.map(agent => (
+                <div key={agent.agentId} className="flex items-center gap-1.5 pl-4">
+                  <span
+                    className="text-xs"
+                    style={{ color: agent.status === 'writing' ? '#f87171' : '#6ee7b7' }}
+                  >
+                    {agent.status === 'writing' ? '✏' : '👁'}
+                  </span>
+                  <span className="text-xs text-white/50 truncate max-w-[120px]" title={agent.agentId}>
+                    {agent.agentId}
                   </span>
                 </div>
               ))}
