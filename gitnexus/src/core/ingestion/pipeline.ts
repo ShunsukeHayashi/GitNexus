@@ -13,7 +13,7 @@ import { processHeritage, processHeritageFromExtracted } from './heritage-proces
 import { computeMRO } from './mro-processor.js';
 import { processCommunities } from './community-processor.js';
 import { processProcesses } from './process-processor.js';
-import { createResolutionContext } from './resolution-context.js';
+import { createResolutionContext, RELATIONSHIP_CONFIDENCE } from './resolution-context.js';
 import { createASTCache } from './ast-cache.js';
 import { PipelineProgress, PipelineResult } from '../../types/pipeline.js';
 import { walkRepositoryPaths, readFileContents } from './filesystem-walker.js';
@@ -792,7 +792,7 @@ export const runPipelineFromRepo = async (
           type: 'MEMBER_OF',
           sourceId: membership.nodeId,
           targetId: membership.communityId,
-          confidence: 1.0,
+          confidence: RELATIONSHIP_CONFIDENCE.structural,
           reason: 'leiden-algorithm',
         });
       });
@@ -851,7 +851,7 @@ export const runPipelineFromRepo = async (
           type: 'STEP_IN_PROCESS',
           sourceId: step.nodeId,
           targetId: step.processId,
-          confidence: 1.0,
+          confidence: RELATIONSHIP_CONFIDENCE.structural,
           reason: 'trace-detection',
           step: step.step,
         });

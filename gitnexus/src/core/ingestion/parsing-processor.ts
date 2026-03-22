@@ -13,6 +13,7 @@ import { typeConfigs } from './type-extractors/index.js';
 import { WorkerPool } from './workers/worker-pool.js';
 import type { ParseWorkerResult, ParseWorkerInput, ExtractedImport, ExtractedCall, ExtractedAssignment, ExtractedHeritage, ExtractedRoute, FileConstructorBindings, FileTypeEnvBindings } from './workers/parse-worker.js';
 import { getTreeSitterBufferSize, TREE_SITTER_MAX_BUFFER } from './constants.js';
+import { RELATIONSHIP_CONFIDENCE } from './resolution-context.js';
 
 export type FileProgressCallback = (current: number, total: number, filePath: string) => void;
 
@@ -276,7 +277,7 @@ const processParsingSequential = async (
         sourceId: fileId,
         targetId: nodeId,
         type: 'DEFINES',
-        confidence: 1.0,
+        confidence: RELATIONSHIP_CONFIDENCE.structural,
         reason: '',
       };
 
@@ -290,7 +291,7 @@ const processParsingSequential = async (
           sourceId: enclosingClassId,
           targetId: nodeId,
           type: memberEdgeType,
-          confidence: 1.0,
+          confidence: RELATIONSHIP_CONFIDENCE.structural,
           reason: '',
         });
       }

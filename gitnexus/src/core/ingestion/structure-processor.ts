@@ -1,5 +1,6 @@
 import { generateId } from "../../lib/utils.js";
 import { KnowledgeGraph, GraphNode, GraphRelationship } from "../graph/types.js";
+import { RELATIONSHIP_CONFIDENCE } from './resolution-context.js';
 
 export const processStructure = ( graph: KnowledgeGraph, paths: string[])=>{
     paths.forEach( path => {
@@ -33,7 +34,7 @@ export const processStructure = ( graph: KnowledgeGraph, paths: string[])=>{
                     type: 'CONTAINS',
                     sourceId: parentId,
                     targetId: nodeId,
-                    confidence: 1.0,
+                    confidence: RELATIONSHIP_CONFIDENCE.structural,
                     reason: '',
                 }
 

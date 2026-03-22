@@ -35,6 +35,17 @@ export const TIER_CONFIDENCE: Record<ResolutionTier, number> = {
   'global': 0.5,
 };
 
+/** Confidence scores for relationship edges by resolution quality. */
+export const RELATIONSHIP_CONFIDENCE = {
+  structural: 1.0,
+  resolved: 0.95,
+  heuristic: 0.8,
+  fallback: 0.7,
+  mroOrdered: 0.9,
+  interfaceSingle: 0.85,
+  uncertain: 0.5,
+} as const;
+
 // --- Map types ---
 export type ImportMap = Map<string, Set<string>>;
 export type PackageMap = Map<string, Set<string>>;

@@ -3,7 +3,7 @@ import { ASTCache } from './ast-cache.js';
 import type { SymbolDefinition, SymbolTable } from './symbol-table.js';
 import Parser from 'tree-sitter';
 import type { ResolutionContext } from './resolution-context.js';
-import { TIER_CONFIDENCE, type ResolutionTier } from './resolution-context.js';
+import { TIER_CONFIDENCE, RELATIONSHIP_CONFIDENCE, type ResolutionTier } from './resolution-context.js';
 import { isLanguageAvailable, loadParser, loadLanguage } from '../tree-sitter/parser-loader.js';
 import { LANGUAGE_QUERIES } from './tree-sitter-queries.js';
 import { generateId } from '../../lib/utils.js';
@@ -475,13 +475,13 @@ export const processCalls = async (
               const relId = generateId('DEFINES', `${fileId}->${nodeId}`);
               graph.addRelationship({
                 id: relId, sourceId: fileId, targetId: nodeId,
-                type: 'DEFINES', confidence: 1.0, reason: '',
+                type: 'DEFINES', confidence: RELATIONSHIP_CONFIDENCE.structural, reason: '',
               });
               if (propEnclosingClassId) {
                 graph.addRelationship({
                   id: generateId('HAS_PROPERTY', `${propEnclosingClassId}->${nodeId}`),
                   sourceId: propEnclosingClassId, targetId: nodeId,
-                  type: 'HAS_PROPERTY', confidence: 1.0, reason: '',
+                  type: 'HAS_PROPERTY', confidence: RELATIONSHIP_CONFIDENCE.structural, reason: '',
                 });
               }
             }
@@ -628,7 +628,7 @@ export const processCalls = async (
         sourceId: pw.srcId,
         targetId: fieldOwner.nodeId,
         type: 'ACCESSES',
-        confidence: 1.0,
+        confidence: RELATIONSHIP_CONFIDENCE.structural,
         reason: 'write',
       });
     }
@@ -1048,7 +1048,7 @@ const makeAccessEmitter = (
       sourceId,
       targetId: fieldNodeId,
       type: 'ACCESSES',
-      confidence: 1.0,
+      confidence: RELATIONSHIP_CONFIDENCE.structural,
       reason: 'read',
     });
   };
@@ -1273,7 +1273,7 @@ export const processAssignmentsFromExtracted = (
       sourceId: asn.sourceId,
       targetId: fieldOwner.nodeId,
       type: 'ACCESSES',
-      confidence: 1.0,
+      confidence: RELATIONSHIP_CONFIDENCE.structural,
       reason: 'write',
     });
   }

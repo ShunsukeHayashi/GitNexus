@@ -49,6 +49,7 @@ import { generateId } from '../../../lib/utils.js';
 import { namedBindingExtractors, preprocessImportPath } from '../import-resolution.js';
 import type { NamedBinding } from '../import-resolution.js';
 import { callRouters } from '../call-routing.js';
+import { RELATIONSHIP_CONFIDENCE } from '../resolution-context.js';
 import { extractPropertyDeclaredType } from '../type-extractors/shared.js';
 import type { NodeLabel } from '../../graph/types.js';
 
@@ -1030,7 +1031,7 @@ const processFileGroup = (
                   sourceId: fileId,
                   targetId: nodeId,
                   type: 'DEFINES',
-                  confidence: 1.0,
+                  confidence: RELATIONSHIP_CONFIDENCE.structural,
                   reason: '',
                 });
                 if (propEnclosingClassId) {
@@ -1039,7 +1040,7 @@ const processFileGroup = (
                     sourceId: propEnclosingClassId,
                     targetId: nodeId,
                     type: 'HAS_PROPERTY',
-                    confidence: 1.0,
+                    confidence: RELATIONSHIP_CONFIDENCE.structural,
                     reason: '',
                   });
                 }
@@ -1231,7 +1232,7 @@ const processFileGroup = (
         sourceId: fileId,
         targetId: nodeId,
         type: 'DEFINES',
-        confidence: 1.0,
+        confidence: RELATIONSHIP_CONFIDENCE.structural,
         reason: '',
       });
 
@@ -1243,7 +1244,7 @@ const processFileGroup = (
           sourceId: enclosingClassId,
           targetId: nodeId,
           type: memberEdgeType,
-          confidence: 1.0,
+          confidence: RELATIONSHIP_CONFIDENCE.structural,
           reason: '',
         });
       }

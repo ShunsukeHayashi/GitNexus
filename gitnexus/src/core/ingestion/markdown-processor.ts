@@ -9,6 +9,7 @@
 import path from 'node:path';
 import { generateId } from '../../lib/utils.js';
 import { KnowledgeGraph, GraphNode, GraphRelationship } from '../graph/types.js';
+import { RELATIONSHIP_CONFIDENCE } from './resolution-context.js';
 
 const HEADING_RE = /^(#{1,6})\s+(.+)$/;
 const LINK_RE = /\[([^\]]*)\]\(([^)]+)\)/g;
@@ -98,7 +99,7 @@ export const processMarkdown = (
         type: 'CONTAINS',
         sourceId: parentId,
         targetId: sectionId,
-        confidence: 1.0,
+        confidence: RELATIONSHIP_CONFIDENCE.structural,
         reason: 'markdown-heading',
       });
 
@@ -145,7 +146,7 @@ export const processMarkdown = (
           type: 'IMPORTS',
           sourceId: fileNodeId,
           targetId: targetFileId,
-          confidence: 0.8,
+          confidence: RELATIONSHIP_CONFIDENCE.heuristic,
           reason: 'markdown-link',
         });
         totalLinks++;

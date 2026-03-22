@@ -11,6 +11,7 @@ import { loadImportConfigs } from './language-config.js';
 import { buildSuffixIndex } from './resolvers/index.js';
 import { callRouters } from './call-routing.js';
 import type { ResolutionContext } from './resolution-context.js';
+import { RELATIONSHIP_CONFIDENCE } from './resolution-context.js';
 import type { SuffixIndex } from './resolvers/index.js';
 import { importResolvers, namedBindingExtractors, preprocessImportPath } from './import-resolution.js';
 import type { ImportResult, ResolveCtx, NamedBinding } from './import-resolution.js';
@@ -85,7 +86,7 @@ function createImportEdgeHelpers(graph: KnowledgeGraph, importMap: ImportMap) {
     const targetId = generateId('File', resolvedPath);
     const relId = generateId('IMPORTS', `${filePath}->${resolvedPath}`);
     totalImportsResolved++;
-    graph.addRelationship({ id: relId, sourceId, targetId, type: 'IMPORTS', confidence: 1.0, reason: '' });
+    graph.addRelationship({ id: relId, sourceId, targetId, type: 'IMPORTS', confidence: RELATIONSHIP_CONFIDENCE.structural, reason: '' });
   };
 
   const addImportEdge = (filePath: string, resolvedPath: string) => {
