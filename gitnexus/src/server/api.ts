@@ -23,6 +23,7 @@ import { hybridSearch } from '../core/search/hybrid-search.js';
 import { LocalBackend } from '../mcp/local/local-backend.js';
 import { mountMCPEndpoints } from './mcp-http.js';
 import { aggregateRemoteGraphMeta } from './mcp-router.js';
+import { calculateFederatedImpact } from '../core/federation/impact.js';
 
 /**
  * Determine whether an HTTP Origin header value is allowed by CORS policy.
@@ -436,6 +437,80 @@ export const createServer = async (port: number, host: string = '127.0.0.1') => 
         message.includes('Missing non-empty "sources" array')
         || message.includes('must be')
         || message.includes('missing repo');
+      res.status(isValidationError ? 400 : 502).json({ error: message });
+    }
+  });
+
+  // Cross-repo blast radius using federated MCP graph metadata
+  app.post('/api/federation/impact', async (req, res) => {
+    try {
+      const sources = Array.isArray(req.body?.sources) ? req.body.sources : null;
+      if (!sources || sources.length === 0) {
+        res.status(400).json({ error: 'Missing non-empty "sources" array in request body' });
+        return;
+      }
+
+      const target = typeof req.body?.target === 'string' ? req.body.target.trim() : '';
+      if (!target) {
+        res.status(400).json({ error: 'Missing "target" in request body' });
+        return;
+      }
+
+      const direction = req.body?.direction === 'downstream' ? 'downstream' : 'upstream';
+      const maxDepth = Number.isFinite(Number(req.body?.maxDepth))
+        ? Math.max(1, Math.min(5, Math.trunc(Number(req.body.maxDepth))))
+        : undefined;
+      const minConfidence = Number.isFinite(Number(req.body?.minConfidence))
+        ? Math.max(0, Math.min(1, Number(req.body.minConfidence)))
+        : undefined;
+      const relationTypes = Array.isArray(req.body?.relationTypes)
+        ? req.body.relationTypes.filter((value: unknown): value is string => typeof value === 'string')
+        : undefined;
+      const namespace = typeof req.body?.namespace === 'string'
+        ? req.body.namespace.trim()
+        : (typeof req.body?.repo === 'string' ? req.body.repo.trim() : undefined);
+
+      const parsedSources = sources.map((source, index) => {
+        if (!source || typeof source !== 'object') {
+          throw new Error(`sources[${index}] must be an object`);
+        }
+        if (typeof source.url !== 'string' || !source.url.trim()) {
+          throw new Error(`sources[${index}].url must be a non-empty string`);
+        }
+        if (typeof source.repo !== 'string' || !source.repo.trim()) {
+          throw new Error(`sources[${index}].repo must be a non-empty string`);
+        }
+
+        return {
+          url: source.url.trim(),
+          repo: source.repo.trim(),
+        };
+      });
+
+      const graph = await aggregateRemoteGraphMeta(parsedSources);
+      const result = calculateFederatedImpact(graph, {
+        target,
+        direction,
+        maxDepth,
+        minConfidence,
+        relationTypes,
+        includeTests: req.body?.includeTests === true,
+        namespace: namespace || undefined,
+      });
+
+      if (result.error) {
+        const status = result.candidates ? 409 : 404;
+        res.status(status).json(result);
+        return;
+      }
+
+      res.json(result);
+    } catch (err: any) {
+      const message = err.message || 'Failed to calculate federated impact';
+      const isValidationError =
+        message.includes('Missing non-empty "sources" array')
+        || message.includes('Missing "target"')
+        || message.includes('must be');
       res.status(isValidationError ? 400 : 502).json({ error: message });
     }
   });
