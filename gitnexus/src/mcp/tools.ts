@@ -226,4 +226,83 @@ Confidence: 1.0 = certain, <0.8 = fuzzy match`,
       required: ['target', 'direction'],
     },
   },
+  {
+    name: 'memory_add',
+    description: 'Save a note, decision, or architectural insight to persistent project memory for cross-session context.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        content: { type: 'string', description: 'The text to save (e.g. a decision, insight, chat note)' },
+        type: {
+          type: 'string',
+          description: 'Category: chat | decision | insight | context',
+          enum: ['chat', 'decision', 'insight', 'context'],
+        },
+        tags: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Tags for later filtering (e.g. ["auth", "performance"])',
+        },
+        repo: { type: 'string', description: 'Repository name or path. Omit if only one repo is indexed.' },
+      },
+      required: ['content'],
+    },
+  },
+  {
+    name: 'memory_search',
+    description: 'Search project memory for past decisions, insights, or context relevant to the current task.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Keyword or phrase to search for' },
+        type: {
+          type: 'string',
+          description: 'Filter by category: chat | decision | insight | context',
+          enum: ['chat', 'decision', 'insight', 'context'],
+        },
+        limit: { type: 'number', description: 'Max results to return (default 20)' },
+        repo: { type: 'string', description: 'Repository name or path. Omit if only one repo is indexed.' },
+      },
+      required: ['query'],
+    },
+  },
+  {
+    name: 'memory_list',
+    description: 'List recent project memory entries.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        limit: { type: 'number', description: 'Max results to return (default 20)' },
+        type: {
+          type: 'string',
+          description: 'Filter by category: chat | decision | insight | context',
+          enum: ['chat', 'decision', 'insight', 'context'],
+        },
+        repo: { type: 'string', description: 'Repository name or path. Omit if only one repo is indexed.' },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'list_remote_instances',
+    description: 'List all configured remote GitNexus instances and their connection status.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: 'aggregate_remote_query',
+    description: 'Query multiple remote GitNexus instances and aggregate results. Useful for cross-repository impact analysis.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        query: { type: 'string', description: 'Concept or symbol to search across remote instances' },
+        instance_ids: { type: 'array', items: { type: 'string' }, description: 'Optional: specific instance IDs to query (default: all)' },
+        limit: { type: 'number', description: 'Max results per instance (default: 10)' },
+      },
+      required: ['query'],
+    },
+  },
 ];
