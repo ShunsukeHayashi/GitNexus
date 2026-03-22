@@ -17,9 +17,12 @@ import {
   OpenRouterConfig,
   MiniMaxConfig,
   ProviderConfig,
+  ChatMessage,
 } from './types';
 
 const STORAGE_KEY = 'gitnexus-llm-settings';
+const CHAT_HISTORY_PREFIX = 'gitnexus-chat-history';
+const MAX_CHAT_MESSAGES = 50;
 
 /**
  * Load settings from localStorage
@@ -354,5 +357,57 @@ export const fetchOpenRouterModels = async (): Promise<Array<{ id: string; name:
     console.error('Error fetching OpenRouter models:', error);
     return [];
   }
+};
+
+// --- Chat History Persistence ---
+
+/**
+ * Build a localStorage key for a project's chat history
+ */
+const chatHistoryKey = (projectName: string): string =>
+  `${CHAT_HISTORY_PREFIX}:${projectName}`;
+
+/**
+ * Load chat history from localStorage for a given project
+ */
+export const loadChatHistory = (projectName: string): ChatMessage[] => {
+  if (!projectName) return [];
+  try {
+    const stored = localStorage.getItem(chatHistoryKey(projectName));
+    if (!stored) return [];
+    const parsed = JSON.parse(stored) as ChatMessage[];
+    // Restore Date objects from ISO strings
+    return parsed.map(m => ({ ...m, timestamp: new Date(m.timestamp) }));
+  } catch {
+    return [];
+  }
+};
+
+/**
+ * Save chat history to localStorage for a given project.
+ * Only the most recent MAX_CHAT_MESSAGES messages are kept.
+ */
+export const saveChatHistory = (projectName: string, messages: ChatMessage[]): void => {
+  if (!projectName) return;
+  try {
+    const trimmed = messages.slice(-MAX_CHAT_MESSAGES);
+    localStorage.setItem(chatHistoryKey(projectName), JSON.stringify(trimmed));
+  } catch {
+    // localStorage full — silently drop oldest entries and retry
+    try {
+      const trimmed = messages.slice(-Math.floor(MAX_CHAT_MESSAGES / 2));
+      localStorage.setItem(chatHistoryKey(projectName), JSON.stringify(trimmed));
+    } catch {
+      // Give up — don't crash the app
+    }
+  }
+};
+
+/**
+ * Clear chat history for a given project
+ */
+export const clearChatHistory = (projectName: string): void => {
+  if (!projectName) return;
+  localStorage.removeItem(chatHistoryKey(projectName));
 };
 

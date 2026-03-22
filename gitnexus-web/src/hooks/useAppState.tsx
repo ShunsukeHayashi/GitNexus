@@ -8,7 +8,7 @@ import type { IngestionWorkerApi } from '../workers/ingestion.worker';
 import type { FileEntry } from '../services/zip';
 import type { EmbeddingProgress, SemanticSearchResult } from '../core/embeddings/types';
 import type { LLMSettings, ProviderConfig, AgentStreamChunk, ChatMessage, ToolCallInfo, MessageStep } from '../core/llm/types';
-import { loadSettings, getActiveProviderConfig, saveSettings } from '../core/llm/settings-service';
+import { loadSettings, getActiveProviderConfig, saveSettings, loadChatHistory, saveChatHistory, clearChatHistory } from '../core/llm/settings-service';
 import type { AgentMessage } from '../core/llm/agent';
 import { DEFAULT_VISIBLE_EDGES, type EdgeType } from '../lib/constants';
 import type { RepoSummary, ConnectToServerResult } from '../services/server-connection';
@@ -295,10 +295,25 @@ export const AppStateProvider = ({ children }: { children: ReactNode }) => {
   const [isAgentInitializing, setIsAgentInitializing] = useState(false);
   const [agentError, setAgentError] = useState<string | null>(null);
 
-  // Chat state
+  // Chat state — initialise from localStorage when projectName is known
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [isChatLoading, setIsChatLoading] = useState(false);
   const [currentToolCalls, setCurrentToolCalls] = useState<ToolCallInfo[]>([]);
+
+  // Restore chat history when project name changes
+  useEffect(() => {
+    if (projectName) {
+      const saved = loadChatHistory(projectName);
+      if (saved.length > 0) setChatMessages(saved);
+    }
+  }, [projectName]);
+
+  // Persist chat history whenever messages change
+  useEffect(() => {
+    if (projectName && chatMessages.length > 0) {
+      saveChatHistory(projectName, chatMessages);
+    }
+  }, [projectName, chatMessages]);
 
   // Code References Panel state
   const [codeReferences, setCodeReferences] = useState<CodeReference[]>([]);
@@ -981,7 +996,8 @@ export const AppStateProvider = ({ children }: { children: ReactNode }) => {
     setChatMessages([]);
     setCurrentToolCalls([]);
     setAgentError(null);
-  }, []);
+    if (projectName) clearChatHistory(projectName);
+  }, [projectName]);
 
   // Switch to a different repo on the connected server
   const switchRepo = useCallback(async (repoName: string) => {
