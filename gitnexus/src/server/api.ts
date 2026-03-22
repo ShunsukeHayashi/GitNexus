@@ -174,6 +174,38 @@ const requestedRepo = (req: express.Request): string | undefined => {
   return undefined;
 };
 
+// ── T023: In-memory presence store ─────────────────────────────────────────
+// Lightweight, no persistence — presence is ephemeral.
+
+interface PresenceEntry {
+  userId: string;
+  displayName: string;
+  focusedNodeId?: string;
+  selectedNodeIds?: string[];
+  color: string;
+  updatedAt: number;
+}
+
+/** Round-robin color palette (8 distinct colors matching the frontend palette). */
+const PRESENCE_COLORS = [
+  '#f59e0b', '#10b981', '#3b82f6', '#ec4899',
+  '#8b5cf6', '#14b8a6', '#f97316', '#6366f1',
+];
+let _presenceColorIdx = 0;
+
+const presenceStore = new Map<string, PresenceEntry>();
+
+/** Remove entries older than 60 seconds. */
+const prunePresence = () => {
+  const cutoff = Date.now() - 60_000;
+  for (const [id, entry] of presenceStore.entries()) {
+    if (entry.updatedAt < cutoff) presenceStore.delete(id);
+  }
+};
+
+// Run pruning every 30 s to keep the map lean.
+setInterval(prunePresence, 30_000);
+
 export const createServer = async (port: number, host: string = '127.0.0.1') => {
   const app = express();
 
@@ -213,6 +245,61 @@ export const createServer = async (port: number, host: string = '127.0.0.1') => 
     }
     const token = signToken('api-client', 'analyst');
     res.json({ token, expiresIn: process.env.GITNEXUS_TOKEN_TTL ?? '24h' });
+  });
+
+  // ── T023: Multiplayer Presence ─────────────────────────────────────────────
+
+  /** GET /api/presence — list all non-expired presence entries */
+  app.get('/api/presence', authenticateOptional, (_req, res) => {
+    prunePresence();
+    res.json(Array.from(presenceStore.values()));
+  });
+
+  /** POST /api/presence — upsert a presence entry (60s TTL on each upsert) */
+  app.post('/api/presence', authenticateOptional, (req, res) => {
+    const body = req.body as {
+      userId?: string;
+      displayName?: string;
+      focusedNodeId?: string;
+      selectedNodeIds?: string[];
+      color?: string;
+    };
+
+    if (!body.userId || typeof body.userId !== 'string') {
+      res.status(400).json({ error: 'Missing required field: userId' });
+      return;
+    }
+    if (!body.displayName || typeof body.displayName !== 'string') {
+      res.status(400).json({ error: 'Missing required field: displayName' });
+      return;
+    }
+
+    // Reuse the user's existing color on updates; assign a new one on first insert.
+    const existing = presenceStore.get(body.userId);
+    const color = body.color ?? existing?.color
+      ?? PRESENCE_COLORS[(_presenceColorIdx++) % PRESENCE_COLORS.length];
+
+    const entry: PresenceEntry = {
+      userId:          body.userId,
+      displayName:     body.displayName,
+      focusedNodeId:   body.focusedNodeId,
+      selectedNodeIds: Array.isArray(body.selectedNodeIds) ? body.selectedNodeIds : undefined,
+      color,
+      updatedAt: Date.now(),
+    };
+    presenceStore.set(body.userId, entry);
+    res.status(200).json(entry);
+  });
+
+  /** DELETE /api/presence/:userId — remove a user's presence entry */
+  app.delete('/api/presence/:userId', authenticateOptional, (req, res) => {
+    const { userId } = req.params;
+    if (presenceStore.has(userId)) {
+      presenceStore.delete(userId);
+      res.status(204).send();
+    } else {
+      res.status(404).json({ error: 'Presence entry not found' });
+    }
   });
 
   // List all registered repos

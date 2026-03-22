@@ -23,6 +23,10 @@ export interface GraphNode {
   x?: number;
   y?: number;
   z?: number;
+  /** T023: hex colors for users who have this node focused (renders torus ring per color) */
+  presenceFocusColors?: string[];
+  /** T023: hex colors for users who have this node in their selectedNodeIds (renders faint tinted border) */
+  presenceSelectedColors?: string[];
 }
 
 export interface GraphLink {
@@ -71,6 +75,30 @@ export const TOOL_COLOR      = '#a855f7';  // Purple — AI tool result
 export const HIGHLIGHT_COLOR = '#38bdf8';  // Sky    — manual query highlight
 export const BLAST_COLOR     = '#ef4444';
 export const SELECTED_COLOR  = '#f59e0b';
+
+// ---------------------------------------------------------------------------
+// T023: Presence colors — 8 visually distinct hex values for multi-user indicators
+// Chosen to contrast against both the dark canvas and the existing node palette.
+// ---------------------------------------------------------------------------
+
+export const PRESENCE_COLORS: readonly string[] = [
+  '#f59e0b',  // Amber
+  '#10b981',  // Emerald
+  '#3b82f6',  // Blue
+  '#ec4899',  // Pink
+  '#8b5cf6',  // Violet
+  '#14b8a6',  // Teal
+  '#f97316',  // Orange
+  '#6366f1',  // Indigo
+] as const;
+
+/**
+ * Returns a presence color for the given round-robin index.
+ * @param index - 0-based index; wraps around modulo PRESENCE_COLORS.length
+ */
+export function getPresenceColor(index: number): string {
+  return PRESENCE_COLORS[((index % PRESENCE_COLORS.length) + PRESENCE_COLORS.length) % PRESENCE_COLORS.length];
+}
 
 // ---------------------------------------------------------------------------
 // T004: module-level geometry / material caches
@@ -125,6 +153,32 @@ function _cachedHaloMat(color: THREE.Color, opacity: number): THREE.MeshBasicMat
 // animationType modifies emissive intensity and halo size independently of glow flag.
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Presence ring geometry / material caches (T023)
+// One thin torus ring per presence user focused on this node.
+// ---------------------------------------------------------------------------
+
+const _ringGeoCache = new Map<string, THREE.TorusGeometry>();
+const _ringMatCache = new Map<string, THREE.MeshBasicMaterial>();
+
+function _cachedTorusGeo(radius: number, tube: number): THREE.TorusGeometry {
+  const k = `${radius.toFixed(4)}:${tube.toFixed(4)}`;
+  if (!_ringGeoCache.has(k)) _ringGeoCache.set(k, new THREE.TorusGeometry(radius, tube, 6, 24));
+  return _ringGeoCache.get(k)!;
+}
+
+function _cachedRingMat(hex: string, opacity: number): THREE.MeshBasicMaterial {
+  const k = `${hex}:${opacity.toFixed(3)}`;
+  if (!_ringMatCache.has(k)) {
+    _ringMatCache.set(k, new THREE.MeshBasicMaterial({
+      color: new THREE.Color(hex),
+      transparent: true,
+      opacity,
+    }));
+  }
+  return _ringMatCache.get(k)!;
+}
+
 export function buildNodeObject(node: GraphNode): THREE.Group {
   const size  = Math.cbrt(node.val) * 2;
   const color = new THREE.Color(node.color);
@@ -163,6 +217,38 @@ export function buildNodeObject(node: GraphNode): THREE.Group {
     group.add(new THREE.Mesh(
       _haloGeoCache.get(haloGeoKey)!,
       _cachedHaloMat(color, haloOpacity),
+    ));
+  }
+
+  // T023: Presence focus rings — one thin torus per focused user, slightly distinct radii
+  // so multiple simultaneous users are visible (each ring offset by 0.4 * index).
+  if (node.presenceFocusColors && node.presenceFocusColors.length > 0) {
+    const baseRingRadius = size * 2.0;
+    const tubeRadius     = Math.max(0.12, size * 0.10);
+    node.presenceFocusColors.forEach((hex, i) => {
+      const ringRadius = baseRingRadius + i * tubeRadius * 2.5;
+      const ring = new THREE.Mesh(
+        _cachedTorusGeo(ringRadius, tubeRadius),
+        _cachedRingMat(hex, 0.85),
+      );
+      // Tilt slightly so the ring is visible even from front-facing angles
+      ring.rotation.x = Math.PI / 4;
+      group.add(ring);
+    });
+  }
+
+  // T023: Presence selection tint — very faint sphere overlay for nodes in another
+  // user's selectedNodeIds list, distinct from the focused-ring style.
+  if (node.presenceSelectedColors && node.presenceSelectedColors.length > 0) {
+    // Use the first (or only) user's color for the tint
+    const tintHex = node.presenceSelectedColors[0];
+    const tintRadius = size * 1.55;
+    const tintGeoKey = `${tintRadius.toFixed(4)}:10:5`;
+    if (!_haloGeoCache.has(tintGeoKey))
+      _haloGeoCache.set(tintGeoKey, new THREE.SphereGeometry(tintRadius, 10, 5));
+    group.add(new THREE.Mesh(
+      _haloGeoCache.get(tintGeoKey)!,
+      _cachedHaloMat(new THREE.Color(tintHex), 0.12),
     ));
   }
 

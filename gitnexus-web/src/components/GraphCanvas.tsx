@@ -12,12 +12,18 @@ import {
   buildNodeObject,
 } from '../lib/graphNodeUtils';
 import { GraphCanvasOverlay } from './GraphCanvasOverlay';
+import type { UserPresence } from '../core/graph/types';
 
 export interface GraphCanvasHandle {
   focusNode: (nodeId: string) => void;
 }
 
-export const GraphCanvas = forwardRef<GraphCanvasHandle>((_, ref) => {
+export interface GraphCanvasProps {
+  /** T023: list of currently active presence users from usePresence() hook */
+  presenceUsers?: UserPresence[];
+}
+
+export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(({ presenceUsers }, ref) => {
   const {
     graph,
     setSelectedNode,
@@ -53,6 +59,28 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((_, ref) => {
     const visibleEdgeSet  = new Set<string>(visibleEdgeTypes);
     const effectiveBlast  = isAIHighlightsEnabled ? blastRadiusNodeIds : new Set<string>();
 
+    // T023: Build per-node presence look-up maps for O(1) access during node mapping.
+    // focusMap:    nodeId → array of user colors that have this node focused
+    // selectedMap: nodeId → array of user colors that have this node selected
+    const focusMap    = new Map<string, string[]>();
+    const selectedMap = new Map<string, string[]>();
+    if (presenceUsers && presenceUsers.length > 0) {
+      for (const user of presenceUsers) {
+        if (user.focusedNodeId) {
+          const arr = focusMap.get(user.focusedNodeId) ?? [];
+          arr.push(user.color);
+          focusMap.set(user.focusedNodeId, arr);
+        }
+        if (user.selectedNodeIds) {
+          for (const nid of user.selectedNodeIds) {
+            const arr = selectedMap.get(nid) ?? [];
+            arr.push(user.color);
+            selectedMap.set(nid, arr);
+          }
+        }
+      }
+    }
+
     const nodes: GraphNode[] = graph.nodes
       .filter(n => visibleLabelSet.size === 0 || visibleLabelSet.has(n.label))
       .map(n => {
@@ -81,6 +109,9 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((_, ref) => {
           glow:  isBlast || isSelected || isCitation || isTool || isHighlit,
           animationType,
           raw:   n,
+          // T023: attach presence info so buildNodeObject can render rings/tints
+          presenceFocusColors:    focusMap.get(n.id),
+          presenceSelectedColors: selectedMap.get(n.id),
         };
       });
 
@@ -104,6 +135,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((_, ref) => {
     visibleLabels,
     visibleEdgeTypes,
     animatedNodes,
+    presenceUsers,
   ]);
 
   const nodeThreeObject = useCallback((node: unknown) => buildNodeObject(node as GraphNode), []);
@@ -190,6 +222,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((_, ref) => {
         onZoomIn={handleZoomIn}
         onZoomOut={handleZoomOut}
         onResetCamera={handleResetCamera}
+        presenceUsers={presenceUsers}
       />
     </div>
   );

@@ -13,6 +13,7 @@ import { FileEntry } from './services/zip';
 import { getActiveProviderConfig } from './core/llm/settings-service';
 import { createKnowledgeGraph } from './core/graph/graph';
 import { connectToServer, fetchRepos, normalizeServerUrl, type ConnectToServerResult } from './services/server-connection';
+import { usePresence } from './hooks/usePresence';
 
 const AppContent = () => {
   const {
@@ -44,6 +45,10 @@ const AppContent = () => {
   } = useAppState();
 
   const graphCanvasRef = useRef<GraphCanvasHandle>(null);
+
+  // T023: Poll presence endpoint when connected to a server.
+  // In zip/local mode serverBaseUrl is undefined, so polling is disabled.
+  const presenceUsers = usePresence(serverBaseUrl ?? undefined);
 
   const handleFileSelect = useCallback(async (file: File) => {
     const projectName = file.name.replace('.zip', '');
@@ -288,7 +293,7 @@ const AppContent = () => {
 
         {/* Graph area - takes remaining space */}
         <div className="flex-1 relative min-w-0">
-          <GraphCanvas ref={graphCanvasRef} />
+          <GraphCanvas ref={graphCanvasRef} presenceUsers={presenceUsers} />
 
           {/* Code References Panel (overlay) - does NOT resize the graph, it overlaps on top */}
           {isCodePanelOpen && (codeReferences.length > 0 || !!selectedNode) && (

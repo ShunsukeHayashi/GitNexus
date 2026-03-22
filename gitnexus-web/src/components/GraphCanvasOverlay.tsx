@@ -21,6 +21,10 @@ import {
   HIGHLIGHT_COLOR,
   BLAST_COLOR,
 } from '../lib/graphNodeUtils';
+import type { UserPresence } from '../core/graph/types';
+
+/** Maximum number of presence users shown inline; excess shown as "+N more". */
+const MAX_PRESENCE_DISPLAYED = 5;
 
 // Minimal shape of the selected node needed by this UI layer.
 interface OverlayNode {
@@ -36,6 +40,8 @@ export interface GraphCanvasOverlayProps {
   onZoomIn:             () => void;
   onZoomOut:            () => void;
   onResetCamera:        () => void;
+  /** T023: active presence users; if undefined or empty the panel is hidden */
+  presenceUsers?:       UserPresence[];
 }
 
 export function GraphCanvasOverlay({
@@ -46,9 +52,48 @@ export function GraphCanvasOverlay({
   onZoomIn,
   onZoomOut,
   onResetCamera,
+  presenceUsers,
 }: GraphCanvasOverlayProps) {
+  // T023: Only show users who have a focused node (most useful to display)
+  const focusedUsers = (presenceUsers ?? []).filter(u => !!u.focusedNodeId);
+  const visibleUsers = focusedUsers.slice(0, MAX_PRESENCE_DISPLAYED);
+  const overflowCount = focusedUsers.length - visibleUsers.length;
   return (
     <>
+      {/* T023: Presence user list — top-left corner, below the node-type legend area */}
+      {visibleUsers.length > 0 && (
+        <div className="absolute top-4 left-4 flex flex-col gap-1.5 z-20">
+          {visibleUsers.map(user => (
+            <div
+              key={user.userId}
+              className="flex items-center gap-2 px-2.5 py-1.5 bg-black/70 border border-white/10 rounded-lg backdrop-blur-sm"
+            >
+              {/* Color dot */}
+              <span
+                className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                style={{ backgroundColor: user.color }}
+              />
+              {/* Display name */}
+              <span className="text-xs text-white/80 font-medium">{user.displayName}</span>
+              {/* Arrow + focused node id */}
+              {user.focusedNodeId && (
+                <>
+                  <span className="text-white/30 text-xs">→</span>
+                  <span className="font-mono text-xs text-white/50 truncate max-w-[120px]">
+                    {user.focusedNodeId}
+                  </span>
+                </>
+              )}
+            </div>
+          ))}
+          {overflowCount > 0 && (
+            <div className="px-2.5 py-1 bg-black/50 border border-white/10 rounded-lg text-xs text-white/40">
+              +{overflowCount} more
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Selected node info bar */}
       {selectedNode && (
         <div className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-2 px-4 py-2 bg-black/70 border border-white/10 rounded-xl backdrop-blur-sm z-20">

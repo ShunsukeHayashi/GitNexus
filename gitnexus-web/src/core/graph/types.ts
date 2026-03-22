@@ -85,3 +85,17 @@ export interface KnowledgeGraph {
   addNode: (node: GraphNode) => void,
   addRelationship: (relationship: GraphRelationship) => void,
 }
+
+// T023: Multiplayer presence — one entry per connected user
+export interface UserPresence {
+  userId: string;
+  displayName: string;
+  /** ID of the node the user is currently focused on */
+  focusedNodeId?: string;
+  /** IDs of nodes the user has selected */
+  selectedNodeIds?: string[];
+  /** CSS hex color auto-assigned by the server, e.g. "#f59e0b" */
+  color: string;
+  /** Unix ms timestamp of last update */
+  updatedAt?: number;
+}
