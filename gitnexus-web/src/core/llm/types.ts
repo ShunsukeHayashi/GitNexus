@@ -111,6 +111,8 @@ export interface LLMSettings {
 
   // Intelligent Clustering Settings
   intelligentClustering: boolean;
+  /** Maximum agent iterations per question (default: 10). Each iteration = 1 LLM call + potential tool calls. */
+  maxIterations: number;
   hasSeenClusteringPrompt: boolean;
   useSameModelForClustering: boolean;
   clusteringProvider?: Partial<ProviderConfig>; // Optional specific config for clustering
@@ -122,6 +124,7 @@ export interface LLMSettings {
 export const DEFAULT_LLM_SETTINGS: LLMSettings = {
   activeProvider: 'gemini',
   intelligentClustering: false,
+  maxIterations: 10,
   hasSeenClusteringPrompt: false,
   useSameModelForClustering: true,
   openai: {
