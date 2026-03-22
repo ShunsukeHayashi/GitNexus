@@ -67,28 +67,61 @@ const BLAST_COLOR     = '#ef4444';
 const SELECTED_COLOR  = '#f59e0b';
 
 // MeshPhong sphere + optional glow halo — gives stereoscopic depth via specular highlights
+// animationType modifies emissiveIntensity and halo geometry independently of the static glow flag.
 function buildNodeObject(node: GraphNode): THREE.Group {
   const size  = Math.cbrt(node.val) * 2;
   const color = new THREE.Color(node.color);
   const group = new THREE.Group();
 
+  // Determine emissive contribution from animationType
+  // - pulse: bright emissive pulse (higher than static glow)
+  // - ripple: mild emissive, halo is the main effect
+  // - glow: strong emissive aura
+  let emissiveColor: THREE.Color;
+  if (node.animationType === 'pulse') {
+    emissiveColor = color.clone().multiplyScalar(0.55);
+  } else if (node.animationType === 'glow') {
+    emissiveColor = color.clone().multiplyScalar(0.6);
+  } else if (node.animationType === 'ripple') {
+    emissiveColor = color.clone().multiplyScalar(0.25);
+  } else if (node.glow) {
+    emissiveColor = color.clone().multiplyScalar(0.3);
+  } else {
+    emissiveColor = new THREE.Color(0x000000);
+  }
+
   // Core sphere: Phong shading adds specular highlights that convey 3D depth
   const geo = new THREE.SphereGeometry(size, 16, 8);
   const mat = new THREE.MeshPhongMaterial({
     color,
-    shininess: 60,
+    shininess: node.animationType === 'pulse' ? 120 : 60,
     specular:  new THREE.Color(0x666666),
-    emissive:  node.glow ? color.clone().multiplyScalar(0.3) : new THREE.Color(0x000000),
+    emissive:  emissiveColor,
   });
   group.add(new THREE.Mesh(geo, mat));
 
-  // Back-side halo for highlighted/selected/blast nodes
-  if (node.glow) {
-    const haloGeo = new THREE.SphereGeometry(size * 2.8, 12, 6);
+  // Halo rendering:
+  //   - ripple: larger halo (size * 3.5) for ripple-outward feel
+  //   - pulse: normal halo with higher opacity to convey intensity
+  //   - glow: normal halo size but stronger opacity
+  //   - static glow: original behaviour
+  const shouldShowHalo = node.glow || node.animationType != null;
+  if (shouldShowHalo) {
+    const haloSize =
+      node.animationType === 'ripple' ? size * 3.5
+      : size * 2.8;
+
+    const haloOpacity =
+      node.animationType === 'pulse'  ? 0.35
+      : node.animationType === 'glow' ? 0.30
+      : node.animationType === 'ripple' ? 0.15
+      : 0.18; // static glow default
+
+    const haloGeo = new THREE.SphereGeometry(haloSize, 12, 6);
     const haloMat = new THREE.MeshBasicMaterial({
       color,
       transparent: true,
-      opacity: 0.18,
+      opacity: haloOpacity,
       side: THREE.BackSide,
     });
     group.add(new THREE.Mesh(haloGeo, haloMat));
@@ -113,6 +146,8 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((_, ref) => {
     // T007: filter states now consumed by GraphCanvas
     visibleLabels,
     visibleEdgeTypes,
+    // T001: animation state from triggerNodeAnimation
+    animatedNodes,
   } = useAppState();
 
   const fgRef = useRef<ForceGraphMethods | undefined>(undefined);
@@ -153,6 +188,9 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((_, ref) => {
                         : isHighlit  ? HIGHLIGHT_COLOR
                         : NODE_COLORS[n.label] ?? DEFAULT_NODE_COLOR;
 
+        // T001: pick up animation type if this node is currently animated
+        const animationType = animatedNodes.get(n.id)?.type;
+
         return {
           id:    n.id,
           name:  n.properties.name,
@@ -161,6 +199,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((_, ref) => {
                  n.label === 'Interface' ? 8  : n.label === 'Function'  ? 4  : n.label === 'Method'    ? 3  : 2,
           color: nodeColor,
           glow:  isBlast || isSelected || isCitation || isTool || isHighlit,
+          animationType,
           raw:   n,
         };
       });
@@ -185,6 +224,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((_, ref) => {
     isAIHighlightsEnabled,
     visibleLabels,    // T007
     visibleEdgeTypes, // T007
+    animatedNodes,    // T001
   ]);
 
   // Stable callback — reads only from node data, no external deps needed
