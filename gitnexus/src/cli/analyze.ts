@@ -50,6 +50,8 @@ export interface AnalyzeOptions {
   verbose?: boolean;
   /** Index the folder even when no .git directory is present. */
   skipGit?: boolean;
+  /** Skip CLAUDE.md, AGENTS.md, and .claude/skills generation. */
+  skipAiContext?: boolean;
 }
 
 /** Threshold: auto-skip embeddings for repos with more nodes than this */
@@ -356,14 +358,17 @@ export const analyzeCommand = async (
     generatedSkills = skillResult.skills;
   }
 
-  const aiContext = await generateAIContextFiles(repoPath, storagePath, projectName, {
-    files: pipelineResult.totalFileCount,
-    nodes: stats.nodes,
-    edges: stats.edges,
-    communities: pipelineResult.communityResult?.stats.totalCommunities,
-    clusters: aggregatedClusterCount,
-    processes: pipelineResult.processResult?.stats.totalProcesses,
-  }, generatedSkills);
+  let aiContext: { files: string[] } = { files: [] };
+  if (!options?.skipAiContext) {
+    aiContext = await generateAIContextFiles(repoPath, storagePath, projectName, {
+      files: pipelineResult.totalFileCount,
+      nodes: stats.nodes,
+      edges: stats.edges,
+      communities: pipelineResult.communityResult?.stats.totalCommunities,
+      clusters: aggregatedClusterCount,
+      processes: pipelineResult.processResult?.stats.totalProcesses,
+    }, generatedSkills);
+  }
 
   await closeLbug();
   // Note: we intentionally do NOT call disposeEmbedder() here.

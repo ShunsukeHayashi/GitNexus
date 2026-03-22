@@ -30,6 +30,7 @@ program
   .option('--skills', 'Generate repo-specific skill files from detected communities')
   .option('--skip-git', 'Index a folder without requiring a .git directory')
    .option('-v, --verbose', 'Enable verbose ingestion warnings (default: false)')
+  .option('--skip-ai-context', 'Skip CLAUDE.md, AGENTS.md, and .claude/skills generation')
    .addHelpText('after', '\nEnvironment variables:\n  GITNEXUS_NO_GITIGNORE=1  Skip .gitignore parsing (still reads .gitnexusignore)')
    .action(createLazyAction(() => import('./analyze.js'), 'analyzeCommand'));
 
