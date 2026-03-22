@@ -18,6 +18,7 @@ import {
   cleanupOldKuzuFiles,
   type RegistryEntry,
 } from '../../storage/repo-manager.js';
+import { TestGenerator } from './test-generator.js';
 // AI context generation is CLI-only (gitnexus analyze)
 // import { generateAIContextFiles } from '../../cli/ai-context.js';
 
@@ -393,6 +394,8 @@ export class LocalBackend {
         return this.context(repo, params);
       case 'impact':
         return this.impact(repo, params);
+      case 'suggest_tests':
+        return this.suggestTests(repo, params);
       case 'detect_changes':
         return this.detectChanges(repo, params);
       case 'rename':
@@ -1765,6 +1768,29 @@ export class LocalBackend {
         step: s.step || s[3], name: s.name || s[0], type: s.type || s[1], filePath: s.filePath || s[2],
       })),
     };
+  }
+
+  // ─── suggest_tests tool ──────────────────────────────────────────────────────
+
+  private async suggestTests(repo: RepoHandle, params: {
+    symbol: string;
+    repo?: string;
+  }): Promise<any> {
+    const { symbol } = params;
+    if (!symbol?.trim()) {
+      return { error: 'symbol parameter is required and cannot be empty.' };
+    }
+
+    // Run impact analysis internally (upstream, depth 2)
+    const impactResult = await this.impact(repo, {
+      target: symbol,
+      direction: 'upstream',
+      maxDepth: 2,
+    });
+
+    // Generate test proposals using the TestGenerator
+    const generator = new TestGenerator();
+    return generator.suggestTests(symbol, impactResult as Record<string, unknown>, repo.repoPath);
   }
 
   async disconnect(): Promise<void> {

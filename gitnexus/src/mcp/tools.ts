@@ -227,6 +227,34 @@ Confidence: 1.0 = certain, <0.8 = fuzzy match`,
     },
   },
   {
+    name: 'suggest_tests',
+    description: `Generate unit test skeletons for a symbol and its blast radius.
+Proposes Vitest tests for uncovered nodes in the impact graph.
+
+WHEN TO USE: After impact() to close test coverage gaps before or after refactoring.
+Runs impact analysis internally — no need to call impact() first.
+
+Returns proposals for:
+- The target symbol itself (if no test found)
+- Direct callers (d=1) that lack test coverage (capped at 8 total)
+
+Each proposal includes:
+- filePath: suggested test file location (e.g. test/unit/foo/bar.test.ts)
+- testCode: complete Vitest test skeleton ready to copy-paste
+- reason: why this test was proposed
+- priority: critical/high/medium/low (derived from blast radius risk)
+
+AFTER THIS: Copy skeletons to the suggested paths, fill in the TODO sections, run \`npx vitest run\`.`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        symbol: { type: 'string', description: 'Symbol name to generate tests for' },
+        repo: { type: 'string', description: 'Repository name or path. Omit if only one repo is indexed.' },
+      },
+      required: ['symbol'],
+    },
+  },
+  {
     name: 'memory_add',
     description: 'Save a note, decision, or architectural insight to persistent project memory for cross-session context.',
     inputSchema: {
