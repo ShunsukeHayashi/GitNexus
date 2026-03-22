@@ -46,7 +46,7 @@ describe('LadybugDB Schema', () => {
 
   describe('REL_TYPES', () => {
     it('includes all expected relationship types', () => {
-      const expected = ['CONTAINS', 'DEFINES', 'IMPORTS', 'CALLS', 'EXTENDS', 'IMPLEMENTS', 'MEMBER_OF', 'STEP_IN_PROCESS'];
+      const expected = ['CONTAINS', 'DEFINES', 'IMPORTS', 'CALLS', 'CROSS_REPO_CALL', 'EXTENDS', 'IMPLEMENTS', 'MEMBER_OF', 'STEP_IN_PROCESS'];
       for (const t of expected) {
         expect(REL_TYPES).toContain(t);
       }
@@ -77,6 +77,13 @@ describe('LadybugDB Schema', () => {
 
     it('Function schema has isExported', () => {
       expect(FUNCTION_SCHEMA).toContain('isExported BOOLEAN');
+    });
+
+    it('core node schemas include repository namespace', () => {
+      expect(FILE_SCHEMA).toContain('namespace STRING');
+      expect(FUNCTION_SCHEMA).toContain('namespace STRING');
+      expect(COMMUNITY_SCHEMA).toContain('namespace STRING');
+      expect(PROCESS_SCHEMA).toContain('namespace STRING');
     });
 
     it('Community schema has heuristicLabel and cohesion', () => {

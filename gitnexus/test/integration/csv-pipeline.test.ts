@@ -84,6 +84,10 @@ describe('streamAllCSVsToDisk', () => {
     const relContent = await fs.readFile(result.relCsvPath, 'utf-8');
     const relLines = relContent.trim().split('\n');
     expect(relLines.length).toBe(4); // header + 3 relationships
+
+    const fileContent = await fs.readFile(fileCsv!.csvPath, 'utf-8');
+    expect(fileContent.split('\n')[0]).toBe('id,name,filePath,namespace,content');
+    expect(fileContent).toContain('"repo"');
   });
 
   it('CSV content is properly escaped', async () => {
@@ -104,6 +108,7 @@ describe('streamAllCSVsToDisk', () => {
     // Content should be properly quoted
     expect(content).toContain('"file:src/index.ts"');
     expect(content).toContain('"index.ts"');
+    expect(content.split('\n')[0]).toBe('id,name,filePath,namespace,content');
   });
 
   it('handles community nodes with keywords', async () => {

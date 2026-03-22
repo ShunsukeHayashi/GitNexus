@@ -41,6 +41,8 @@ import { SupportedLanguages } from '../../config/supported-languages.js';
 export type NodeProperties = {
   name: string,
   filePath: string,
+  /** Repository-level namespace used to separate merged polyrepo graphs */
+  namespace?: string,
   startLine?: number,
   endLine?: number,
   language?: SupportedLanguages,
@@ -74,6 +76,7 @@ export type NodeProperties = {
 export type RelationshipType =
   | 'CONTAINS'
   | 'CALLS'
+  | 'CROSS_REPO_CALL'
   | 'INHERITS'
   | 'OVERRIDES'
   | 'IMPORTS'

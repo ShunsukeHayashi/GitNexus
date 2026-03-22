@@ -26,7 +26,7 @@ export type NodeTableName = typeof NODE_TABLES[number];
 export const REL_TABLE_NAME = 'CodeRelation';
 
 // Valid relation types
-export const REL_TYPES = ['CONTAINS', 'DEFINES', 'IMPORTS', 'CALLS', 'EXTENDS', 'IMPLEMENTS', 'HAS_METHOD', 'HAS_PROPERTY', 'ACCESSES', 'OVERRIDES', 'MEMBER_OF', 'STEP_IN_PROCESS'] as const;
+export const REL_TYPES = ['CONTAINS', 'DEFINES', 'IMPORTS', 'CALLS', 'CROSS_REPO_CALL', 'EXTENDS', 'IMPLEMENTS', 'HAS_METHOD', 'HAS_PROPERTY', 'ACCESSES', 'OVERRIDES', 'MEMBER_OF', 'STEP_IN_PROCESS'] as const;
 export type RelType = typeof REL_TYPES[number];
 
 // ============================================================================
@@ -43,6 +43,7 @@ CREATE NODE TABLE File (
   id STRING,
   name STRING,
   filePath STRING,
+  namespace STRING,
   content STRING,
   PRIMARY KEY (id)
 )`;
@@ -52,6 +53,7 @@ CREATE NODE TABLE Folder (
   id STRING,
   name STRING,
   filePath STRING,
+  namespace STRING,
   PRIMARY KEY (id)
 )`;
 
@@ -60,6 +62,7 @@ CREATE NODE TABLE Function (
   id STRING,
   name STRING,
   filePath STRING,
+  namespace STRING,
   startLine INT64,
   endLine INT64,
   isExported BOOLEAN,
@@ -73,6 +76,7 @@ CREATE NODE TABLE Class (
   id STRING,
   name STRING,
   filePath STRING,
+  namespace STRING,
   startLine INT64,
   endLine INT64,
   isExported BOOLEAN,
@@ -86,6 +90,7 @@ CREATE NODE TABLE Interface (
   id STRING,
   name STRING,
   filePath STRING,
+  namespace STRING,
   startLine INT64,
   endLine INT64,
   isExported BOOLEAN,
@@ -99,6 +104,7 @@ CREATE NODE TABLE Method (
   id STRING,
   name STRING,
   filePath STRING,
+  namespace STRING,
   startLine INT64,
   endLine INT64,
   isExported BOOLEAN,
@@ -114,6 +120,7 @@ CREATE NODE TABLE CodeElement (
   id STRING,
   name STRING,
   filePath STRING,
+  namespace STRING,
   startLine INT64,
   endLine INT64,
   isExported BOOLEAN,
@@ -130,6 +137,7 @@ export const COMMUNITY_SCHEMA = `
 CREATE NODE TABLE Community (
   id STRING,
   label STRING,
+  namespace STRING,
   heuristicLabel STRING,
   keywords STRING[],
   description STRING,
@@ -147,6 +155,7 @@ export const PROCESS_SCHEMA = `
 CREATE NODE TABLE Process (
   id STRING,
   label STRING,
+  namespace STRING,
   heuristicLabel STRING,
   processType STRING,
   stepCount INT32,
@@ -167,6 +176,7 @@ CREATE NODE TABLE \`${name}\` (
   id STRING,
   name STRING,
   filePath STRING,
+  namespace STRING,
   startLine INT64,
   endLine INT64,
   content STRING,
@@ -198,6 +208,7 @@ CREATE NODE TABLE Section (
   id STRING,
   name STRING,
   filePath STRING,
+  namespace STRING,
   startLine INT64,
   endLine INT64,
   level INT64,

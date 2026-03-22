@@ -374,29 +374,29 @@ const TABLES_WITH_EXPORTED = new Set<string>(['Function', 'Class', 'Interface', 
 const getCopyQuery = (table: NodeTableName, filePath: string): string => {
   const t = escapeTableName(table);
   if (table === 'File') {
-    return `COPY ${t}(id, name, filePath, content) FROM "${filePath}" ${COPY_CSV_OPTS}`;
+    return `COPY ${t}(id, name, filePath, namespace, content) FROM "${filePath}" ${COPY_CSV_OPTS}`;
   }
   if (table === 'Folder') {
-    return `COPY ${t}(id, name, filePath) FROM "${filePath}" ${COPY_CSV_OPTS}`;
+    return `COPY ${t}(id, name, filePath, namespace) FROM "${filePath}" ${COPY_CSV_OPTS}`;
   }
   if (table === 'Community') {
-    return `COPY ${t}(id, label, heuristicLabel, keywords, description, enrichedBy, cohesion, symbolCount) FROM "${filePath}" ${COPY_CSV_OPTS}`;
+    return `COPY ${t}(id, label, namespace, heuristicLabel, keywords, description, enrichedBy, cohesion, symbolCount) FROM "${filePath}" ${COPY_CSV_OPTS}`;
   }
   if (table === 'Process') {
-    return `COPY ${t}(id, label, heuristicLabel, processType, stepCount, communities, entryPointId, terminalId) FROM "${filePath}" ${COPY_CSV_OPTS}`;
+    return `COPY ${t}(id, label, namespace, heuristicLabel, processType, stepCount, communities, entryPointId, terminalId) FROM "${filePath}" ${COPY_CSV_OPTS}`;
   }
   if (table === 'Section') {
-    return `COPY ${t}(id, name, filePath, startLine, endLine, level, content, description) FROM "${filePath}" ${COPY_CSV_OPTS}`;
+    return `COPY ${t}(id, name, filePath, namespace, startLine, endLine, level, content, description) FROM "${filePath}" ${COPY_CSV_OPTS}`;
   }
   if (table === 'Method') {
-    return `COPY ${t}(id, name, filePath, startLine, endLine, isExported, content, description, parameterCount, returnType) FROM "${filePath}" ${COPY_CSV_OPTS}`;
+    return `COPY ${t}(id, name, filePath, namespace, startLine, endLine, isExported, content, description, parameterCount, returnType) FROM "${filePath}" ${COPY_CSV_OPTS}`;
   }
   // TypeScript/JS code element tables have isExported; multi-language tables do not
   if (TABLES_WITH_EXPORTED.has(table)) {
-    return `COPY ${t}(id, name, filePath, startLine, endLine, isExported, content, description) FROM "${filePath}" ${COPY_CSV_OPTS}`;
+    return `COPY ${t}(id, name, filePath, namespace, startLine, endLine, isExported, content, description) FROM "${filePath}" ${COPY_CSV_OPTS}`;
   }
   // Multi-language tables (Struct, Impl, Trait, Macro, etc.)
-  return `COPY ${t}(id, name, filePath, startLine, endLine, content, description) FROM "${filePath}" ${COPY_CSV_OPTS}`;
+  return `COPY ${t}(id, name, filePath, namespace, startLine, endLine, content, description) FROM "${filePath}" ${COPY_CSV_OPTS}`;
 };
 
 /**
@@ -429,19 +429,24 @@ export const insertNodeToLbug = async (
     let query: string;
 
     if (label === 'File') {
-      query = `CREATE (n:File {id: ${escapeValue(properties.id)}, name: ${escapeValue(properties.name)}, filePath: ${escapeValue(properties.filePath)}, content: ${escapeValue(properties.content || '')}})`;
+      query = `CREATE (n:File {id: ${escapeValue(properties.id)}, name: ${escapeValue(properties.name)}, filePath: ${escapeValue(properties.filePath)}, namespace: ${escapeValue(properties.namespace || '')}, content: ${escapeValue(properties.content || '')}})`;
     } else if (label === 'Folder') {
-      query = `CREATE (n:Folder {id: ${escapeValue(properties.id)}, name: ${escapeValue(properties.name)}, filePath: ${escapeValue(properties.filePath)}})`;
+      query = `CREATE (n:Folder {id: ${escapeValue(properties.id)}, name: ${escapeValue(properties.name)}, filePath: ${escapeValue(properties.filePath)}, namespace: ${escapeValue(properties.namespace || '')}})`;
     } else if (label === 'Section') {
       const descPart = properties.description ? `, description: ${escapeValue(properties.description)}` : '';
-      query = `CREATE (n:Section {id: ${escapeValue(properties.id)}, name: ${escapeValue(properties.name)}, filePath: ${escapeValue(properties.filePath)}, startLine: ${properties.startLine || 0}, endLine: ${properties.endLine || 0}, level: ${properties.level || 1}, content: ${escapeValue(properties.content || '')}${descPart}})`;
+      query = `CREATE (n:Section {id: ${escapeValue(properties.id)}, name: ${escapeValue(properties.name)}, filePath: ${escapeValue(properties.filePath)}, namespace: ${escapeValue(properties.namespace || '')}, startLine: ${properties.startLine || 0}, endLine: ${properties.endLine || 0}, level: ${properties.level || 1}, content: ${escapeValue(properties.content || '')}${descPart}})`;
+    } else if (label === 'Community') {
+      const descPart = properties.description ? `, description: ${escapeValue(properties.description)}` : '';
+      query = `CREATE (n:Community {id: ${escapeValue(properties.id)}, label: ${escapeValue(properties.name)}, namespace: ${escapeValue(properties.namespace || '')}, heuristicLabel: ${escapeValue(properties.heuristicLabel || '')}, keywords: ${escapeValue(properties.keywords || '[]')}, enrichedBy: ${escapeValue(properties.enrichedBy || 'heuristic')}, cohesion: ${properties.cohesion || 0}, symbolCount: ${properties.symbolCount || 0}${descPart}})`;
+    } else if (label === 'Process') {
+      query = `CREATE (n:Process {id: ${escapeValue(properties.id)}, label: ${escapeValue(properties.name)}, namespace: ${escapeValue(properties.namespace || '')}, heuristicLabel: ${escapeValue(properties.heuristicLabel || '')}, processType: ${escapeValue(properties.processType || '')}, stepCount: ${properties.stepCount || 0}, communities: ${escapeValue(properties.communities || '[]')}, entryPointId: ${escapeValue(properties.entryPointId || '')}, terminalId: ${escapeValue(properties.terminalId || '')}})`;
     } else if (TABLES_WITH_EXPORTED.has(label)) {
       const descPart = properties.description ? `, description: ${escapeValue(properties.description)}` : '';
-      query = `CREATE (n:${t} {id: ${escapeValue(properties.id)}, name: ${escapeValue(properties.name)}, filePath: ${escapeValue(properties.filePath)}, startLine: ${properties.startLine || 0}, endLine: ${properties.endLine || 0}, isExported: ${!!properties.isExported}, content: ${escapeValue(properties.content || '')}${descPart}})`;
+      query = `CREATE (n:${t} {id: ${escapeValue(properties.id)}, name: ${escapeValue(properties.name)}, filePath: ${escapeValue(properties.filePath)}, namespace: ${escapeValue(properties.namespace || '')}, startLine: ${properties.startLine || 0}, endLine: ${properties.endLine || 0}, isExported: ${!!properties.isExported}, content: ${escapeValue(properties.content || '')}${descPart}})`;
     } else {
       // Multi-language tables (Struct, Impl, Trait, Macro, etc.) — no isExported
       const descPart = properties.description ? `, description: ${escapeValue(properties.description)}` : '';
-      query = `CREATE (n:${t} {id: ${escapeValue(properties.id)}, name: ${escapeValue(properties.name)}, filePath: ${escapeValue(properties.filePath)}, startLine: ${properties.startLine || 0}, endLine: ${properties.endLine || 0}, content: ${escapeValue(properties.content || '')}${descPart}})`;
+      query = `CREATE (n:${t} {id: ${escapeValue(properties.id)}, name: ${escapeValue(properties.name)}, filePath: ${escapeValue(properties.filePath)}, namespace: ${escapeValue(properties.namespace || '')}, startLine: ${properties.startLine || 0}, endLine: ${properties.endLine || 0}, content: ${escapeValue(properties.content || '')}${descPart}})`;
     }
 
     // Use per-query connection if dbPath provided (avoids lock conflicts)
@@ -503,18 +508,23 @@ export const batchInsertNodesToLbug = async (
         // Use MERGE instead of CREATE for upsert behavior (handles duplicates gracefully)
         const t = escapeTableName(label);
         if (label === 'File') {
-          query = `MERGE (n:File {id: ${escapeValue(properties.id)}}) SET n.name = ${escapeValue(properties.name)}, n.filePath = ${escapeValue(properties.filePath)}, n.content = ${escapeValue(properties.content || '')}`;
+          query = `MERGE (n:File {id: ${escapeValue(properties.id)}}) SET n.name = ${escapeValue(properties.name)}, n.filePath = ${escapeValue(properties.filePath)}, n.namespace = ${escapeValue(properties.namespace || '')}, n.content = ${escapeValue(properties.content || '')}`;
         } else if (label === 'Folder') {
-          query = `MERGE (n:Folder {id: ${escapeValue(properties.id)}}) SET n.name = ${escapeValue(properties.name)}, n.filePath = ${escapeValue(properties.filePath)}`;
+          query = `MERGE (n:Folder {id: ${escapeValue(properties.id)}}) SET n.name = ${escapeValue(properties.name)}, n.filePath = ${escapeValue(properties.filePath)}, n.namespace = ${escapeValue(properties.namespace || '')}`;
         } else if (label === 'Section') {
           const descPart = properties.description ? `, n.description = ${escapeValue(properties.description)}` : '';
-          query = `MERGE (n:Section {id: ${escapeValue(properties.id)}}) SET n.name = ${escapeValue(properties.name)}, n.filePath = ${escapeValue(properties.filePath)}, n.startLine = ${properties.startLine || 0}, n.endLine = ${properties.endLine || 0}, n.level = ${properties.level || 1}, n.content = ${escapeValue(properties.content || '')}${descPart}`;
+          query = `MERGE (n:Section {id: ${escapeValue(properties.id)}}) SET n.name = ${escapeValue(properties.name)}, n.filePath = ${escapeValue(properties.filePath)}, n.namespace = ${escapeValue(properties.namespace || '')}, n.startLine = ${properties.startLine || 0}, n.endLine = ${properties.endLine || 0}, n.level = ${properties.level || 1}, n.content = ${escapeValue(properties.content || '')}${descPart}`;
+        } else if (label === 'Community') {
+          const descPart = properties.description ? `, n.description = ${escapeValue(properties.description)}` : '';
+          query = `MERGE (n:Community {id: ${escapeValue(properties.id)}}) SET n.label = ${escapeValue(properties.name)}, n.namespace = ${escapeValue(properties.namespace || '')}, n.heuristicLabel = ${escapeValue(properties.heuristicLabel || '')}, n.keywords = ${escapeValue(properties.keywords || '[]')}, n.enrichedBy = ${escapeValue(properties.enrichedBy || 'heuristic')}, n.cohesion = ${properties.cohesion || 0}, n.symbolCount = ${properties.symbolCount || 0}${descPart}`;
+        } else if (label === 'Process') {
+          query = `MERGE (n:Process {id: ${escapeValue(properties.id)}}) SET n.label = ${escapeValue(properties.name)}, n.namespace = ${escapeValue(properties.namespace || '')}, n.heuristicLabel = ${escapeValue(properties.heuristicLabel || '')}, n.processType = ${escapeValue(properties.processType || '')}, n.stepCount = ${properties.stepCount || 0}, n.communities = ${escapeValue(properties.communities || '[]')}, n.entryPointId = ${escapeValue(properties.entryPointId || '')}, n.terminalId = ${escapeValue(properties.terminalId || '')}`;
         } else if (TABLES_WITH_EXPORTED.has(label)) {
           const descPart = properties.description ? `, n.description = ${escapeValue(properties.description)}` : '';
-          query = `MERGE (n:${t} {id: ${escapeValue(properties.id)}}) SET n.name = ${escapeValue(properties.name)}, n.filePath = ${escapeValue(properties.filePath)}, n.startLine = ${properties.startLine || 0}, n.endLine = ${properties.endLine || 0}, n.isExported = ${!!properties.isExported}, n.content = ${escapeValue(properties.content || '')}${descPart}`;
+          query = `MERGE (n:${t} {id: ${escapeValue(properties.id)}}) SET n.name = ${escapeValue(properties.name)}, n.filePath = ${escapeValue(properties.filePath)}, n.namespace = ${escapeValue(properties.namespace || '')}, n.startLine = ${properties.startLine || 0}, n.endLine = ${properties.endLine || 0}, n.isExported = ${!!properties.isExported}, n.content = ${escapeValue(properties.content || '')}${descPart}`;
         } else {
           const descPart = properties.description ? `, n.description = ${escapeValue(properties.description)}` : '';
-          query = `MERGE (n:${t} {id: ${escapeValue(properties.id)}}) SET n.name = ${escapeValue(properties.name)}, n.filePath = ${escapeValue(properties.filePath)}, n.startLine = ${properties.startLine || 0}, n.endLine = ${properties.endLine || 0}, n.content = ${escapeValue(properties.content || '')}${descPart}`;
+          query = `MERGE (n:${t} {id: ${escapeValue(properties.id)}}) SET n.name = ${escapeValue(properties.name)}, n.filePath = ${escapeValue(properties.filePath)}, n.namespace = ${escapeValue(properties.namespace || '')}, n.startLine = ${properties.startLine || 0}, n.endLine = ${properties.endLine || 0}, n.content = ${escapeValue(properties.content || '')}${descPart}`;
         }
 
         await tempConn.query(query);

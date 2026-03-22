@@ -224,25 +224,27 @@ export const streamAllCSVsToDisk = async (
   process.setMaxListeners(prevMax + 40);
 
   const contentCache = new FileContentCache(repoPath);
+  const repoNamespace = path.basename(path.resolve(repoPath)) || 'repository';
+  const nodeNamespace = (node: GraphNode): string => node.properties.namespace || repoNamespace;
 
   // Create writers for every node type up-front
-  const fileWriter = new BufferedCSVWriter(path.join(csvDir, 'file.csv'), 'id,name,filePath,content');
-  const folderWriter = new BufferedCSVWriter(path.join(csvDir, 'folder.csv'), 'id,name,filePath');
-  const codeElementHeader = 'id,name,filePath,startLine,endLine,isExported,content,description';
+  const fileWriter = new BufferedCSVWriter(path.join(csvDir, 'file.csv'), 'id,name,filePath,namespace,content');
+  const folderWriter = new BufferedCSVWriter(path.join(csvDir, 'folder.csv'), 'id,name,filePath,namespace');
+  const codeElementHeader = 'id,name,filePath,namespace,startLine,endLine,isExported,content,description';
   const functionWriter = new BufferedCSVWriter(path.join(csvDir, 'function.csv'), codeElementHeader);
   const classWriter = new BufferedCSVWriter(path.join(csvDir, 'class.csv'), codeElementHeader);
   const interfaceWriter = new BufferedCSVWriter(path.join(csvDir, 'interface.csv'), codeElementHeader);
-  const methodHeader = 'id,name,filePath,startLine,endLine,isExported,content,description,parameterCount,returnType';
+  const methodHeader = 'id,name,filePath,namespace,startLine,endLine,isExported,content,description,parameterCount,returnType';
   const methodWriter = new BufferedCSVWriter(path.join(csvDir, 'method.csv'), methodHeader);
   const codeElemWriter = new BufferedCSVWriter(path.join(csvDir, 'codeelement.csv'), codeElementHeader);
-  const communityWriter = new BufferedCSVWriter(path.join(csvDir, 'community.csv'), 'id,label,heuristicLabel,keywords,description,enrichedBy,cohesion,symbolCount');
-  const processWriter = new BufferedCSVWriter(path.join(csvDir, 'process.csv'), 'id,label,heuristicLabel,processType,stepCount,communities,entryPointId,terminalId');
+  const communityWriter = new BufferedCSVWriter(path.join(csvDir, 'community.csv'), 'id,label,namespace,heuristicLabel,keywords,description,enrichedBy,cohesion,symbolCount');
+  const processWriter = new BufferedCSVWriter(path.join(csvDir, 'process.csv'), 'id,label,namespace,heuristicLabel,processType,stepCount,communities,entryPointId,terminalId');
 
   // Section nodes have an extra 'level' column
-  const sectionWriter = new BufferedCSVWriter(path.join(csvDir, 'section.csv'), 'id,name,filePath,startLine,endLine,level,content,description');
+  const sectionWriter = new BufferedCSVWriter(path.join(csvDir, 'section.csv'), 'id,name,filePath,namespace,startLine,endLine,level,content,description');
 
   // Multi-language node types share the same CSV shape (no isExported column)
-  const multiLangHeader = 'id,name,filePath,startLine,endLine,content,description';
+  const multiLangHeader = 'id,name,filePath,namespace,startLine,endLine,content,description';
   const MULTI_LANG_TYPES = ['Struct', 'Enum', 'Macro', 'Typedef', 'Union', 'Namespace', 'Trait', 'Impl',
     'TypeAlias', 'Const', 'Static', 'Property', 'Record', 'Delegate', 'Annotation', 'Constructor', 'Template', 'Module'] as const;
   const multiLangWriters = new Map<string, BufferedCSVWriter>();
@@ -270,6 +272,7 @@ export const streamAllCSVsToDisk = async (
           escapeCSVField(node.id),
           escapeCSVField(node.properties.name || ''),
           escapeCSVField(node.properties.filePath || ''),
+          escapeCSVField(nodeNamespace(node)),
           escapeCSVField(content),
         ].join(','));
         break;
@@ -279,6 +282,7 @@ export const streamAllCSVsToDisk = async (
           escapeCSVField(node.id),
           escapeCSVField(node.properties.name || ''),
           escapeCSVField(node.properties.filePath || ''),
+          escapeCSVField(nodeNamespace(node)),
         ].join(','));
         break;
       case 'Community': {
@@ -287,6 +291,7 @@ export const streamAllCSVsToDisk = async (
         await communityWriter.addRow([
           escapeCSVField(node.id),
           escapeCSVField(node.properties.name || ''),
+          escapeCSVField(nodeNamespace(node)),
           escapeCSVField(node.properties.heuristicLabel || ''),
           keywordsStr,
           escapeCSVField((node.properties as any).description || ''),
@@ -302,6 +307,7 @@ export const streamAllCSVsToDisk = async (
         await processWriter.addRow([
           escapeCSVField(node.id),
           escapeCSVField(node.properties.name || ''),
+          escapeCSVField(nodeNamespace(node)),
           escapeCSVField((node.properties as any).heuristicLabel || ''),
           escapeCSVField((node.properties as any).processType || ''),
           escapeCSVNumber((node.properties as any).stepCount, 0),
@@ -317,6 +323,7 @@ export const streamAllCSVsToDisk = async (
           escapeCSVField(node.id),
           escapeCSVField(node.properties.name || ''),
           escapeCSVField(node.properties.filePath || ''),
+          escapeCSVField(nodeNamespace(node)),
           escapeCSVNumber(node.properties.startLine, -1),
           escapeCSVNumber(node.properties.endLine, -1),
           node.properties.isExported ? 'true' : 'false',
@@ -333,6 +340,7 @@ export const streamAllCSVsToDisk = async (
           escapeCSVField(node.id),
           escapeCSVField(node.properties.name || ''),
           escapeCSVField(node.properties.filePath || ''),
+          escapeCSVField(nodeNamespace(node)),
           escapeCSVNumber(node.properties.startLine, -1),
           escapeCSVNumber(node.properties.endLine, -1),
           escapeCSVNumber((node.properties as any).level, 1),
@@ -350,6 +358,7 @@ export const streamAllCSVsToDisk = async (
             escapeCSVField(node.id),
             escapeCSVField(node.properties.name || ''),
             escapeCSVField(node.properties.filePath || ''),
+            escapeCSVField(nodeNamespace(node)),
             escapeCSVNumber(node.properties.startLine, -1),
             escapeCSVNumber(node.properties.endLine, -1),
             node.properties.isExported ? 'true' : 'false',
@@ -365,6 +374,7 @@ export const streamAllCSVsToDisk = async (
               escapeCSVField(node.id),
               escapeCSVField(node.properties.name || ''),
               escapeCSVField(node.properties.filePath || ''),
+              escapeCSVField(nodeNamespace(node)),
               escapeCSVNumber(node.properties.startLine, -1),
               escapeCSVNumber(node.properties.endLine, -1),
               escapeCSVField(content),

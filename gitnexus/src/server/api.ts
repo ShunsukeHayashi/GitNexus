@@ -97,15 +97,15 @@ const buildGraph = async (): Promise<{ nodes: GraphNode[]; relationships: GraphR
     try {
       let query = '';
       if (table === 'File') {
-        query = `MATCH (n:File) RETURN n.id AS id, n.name AS name, n.filePath AS filePath, n.content AS content`;
+        query = `MATCH (n:File) RETURN n.id AS id, n.name AS name, n.filePath AS filePath, n.namespace AS namespace, n.content AS content`;
       } else if (table === 'Folder') {
-        query = `MATCH (n:Folder) RETURN n.id AS id, n.name AS name, n.filePath AS filePath`;
+        query = `MATCH (n:Folder) RETURN n.id AS id, n.name AS name, n.filePath AS filePath, n.namespace AS namespace`;
       } else if (table === 'Community') {
-        query = `MATCH (n:Community) RETURN n.id AS id, n.label AS label, n.heuristicLabel AS heuristicLabel, n.cohesion AS cohesion, n.symbolCount AS symbolCount`;
+        query = `MATCH (n:Community) RETURN n.id AS id, n.label AS label, n.namespace AS namespace, n.heuristicLabel AS heuristicLabel, n.cohesion AS cohesion, n.symbolCount AS symbolCount`;
       } else if (table === 'Process') {
-        query = `MATCH (n:Process) RETURN n.id AS id, n.label AS label, n.heuristicLabel AS heuristicLabel, n.processType AS processType, n.stepCount AS stepCount, n.communities AS communities, n.entryPointId AS entryPointId, n.terminalId AS terminalId`;
+        query = `MATCH (n:Process) RETURN n.id AS id, n.label AS label, n.namespace AS namespace, n.heuristicLabel AS heuristicLabel, n.processType AS processType, n.stepCount AS stepCount, n.communities AS communities, n.entryPointId AS entryPointId, n.terminalId AS terminalId`;
       } else {
-        query = `MATCH (n:${table}) RETURN n.id AS id, n.name AS name, n.filePath AS filePath, n.startLine AS startLine, n.endLine AS endLine, n.content AS content`;
+        query = `MATCH (n:${table}) RETURN n.id AS id, n.name AS name, n.filePath AS filePath, n.namespace AS namespace, n.startLine AS startLine, n.endLine AS endLine, n.content AS content`;
       }
 
       const rows = await executeQuery(query);
@@ -116,6 +116,7 @@ const buildGraph = async (): Promise<{ nodes: GraphNode[]; relationships: GraphR
           properties: {
             name: row.name ?? row.label ?? row[1],
             filePath: row.filePath ?? row[2],
+            namespace: row.namespace,
             startLine: row.startLine,
             endLine: row.endLine,
             content: row.content,
