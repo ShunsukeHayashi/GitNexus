@@ -23,7 +23,7 @@ export interface ResourceTemplate {
 }
 
 /**
- * Static resources — includes per-repo resources and the global repos list
+ * Static resources — global resources not scoped to a specific repo
  */
 export function getResourceDefinitions(): ResourceDefinition[] {
   return [
@@ -40,6 +40,55 @@ export function getResourceDefinitions(): ResourceDefinition[] {
       mimeType: 'text/markdown',
     },
   ];
+}
+
+/**
+ * Dynamic per-repo resource definitions — expands templates into concrete URIs
+ * for all currently indexed repositories.
+ *
+ * MCP clients that only query resources/list (not resources/templates/list) rely
+ * on this to discover gitnexus://repo/{name}/context etc. without knowing repo
+ * names in advance.  See: https://github.com/abhigyanpatwari/GitNexus/issues/410
+ */
+export async function getDynamicResourceDefinitions(backend: LocalBackend): Promise<ResourceDefinition[]> {
+  let repos: Array<{ name: string }>;
+  try {
+    repos = await backend.listRepos();
+  } catch {
+    return [];
+  }
+
+  const definitions: ResourceDefinition[] = [];
+  for (const repo of repos) {
+    const name = encodeURIComponent(repo.name);
+    definitions.push(
+      {
+        uri: `gitnexus://repo/${name}/context`,
+        name: `${repo.name} — Overview`,
+        description: `Stats, staleness check, and available tools for ${repo.name}`,
+        mimeType: 'text/yaml',
+      },
+      {
+        uri: `gitnexus://repo/${name}/clusters`,
+        name: `${repo.name} — Modules`,
+        description: `All functional areas (Leiden clusters) for ${repo.name}`,
+        mimeType: 'text/yaml',
+      },
+      {
+        uri: `gitnexus://repo/${name}/processes`,
+        name: `${repo.name} — Processes`,
+        description: `All execution flows for ${repo.name}`,
+        mimeType: 'text/yaml',
+      },
+      {
+        uri: `gitnexus://repo/${name}/schema`,
+        name: `${repo.name} — Graph Schema`,
+        description: `Node/edge schema for Cypher queries against ${repo.name}`,
+        mimeType: 'text/yaml',
+      },
+    );
+  }
+  return definitions;
 }
 
 /**

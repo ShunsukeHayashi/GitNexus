@@ -26,7 +26,7 @@ import {
 import { GITNEXUS_TOOLS } from './tools.js';
 import { realStdoutWrite } from './core/lbug-adapter.js';
 import type { LocalBackend } from './local/local-backend.js';
-import { getResourceDefinitions, getResourceTemplates, readResource } from './resources.js';
+import { getResourceDefinitions, getDynamicResourceDefinitions, getResourceTemplates, readResource } from './resources.js';
 
 /**
  * Next-step hints appended to tool responses.
@@ -98,11 +98,15 @@ export function createMCPServer(backend: LocalBackend): Server {
     }
   );
 
-  // Handle list resources request
+  // Handle list resources request — returns both static global resources and
+  // concrete per-repo resources so MCP clients that don't support resource
+  // templates can still discover and read repo-scoped URIs.
+  // Fixes: https://github.com/abhigyanpatwari/GitNexus/issues/410
   server.setRequestHandler(ListResourcesRequestSchema, async () => {
-    const resources = getResourceDefinitions();
+    const staticResources = getResourceDefinitions();
+    const dynamicResources = await getDynamicResourceDefinitions(backend);
     return {
-      resources: resources.map(r => ({
+      resources: [...staticResources, ...dynamicResources].map(r => ({
         uri: r.uri,
         name: r.name,
         description: r.description,
