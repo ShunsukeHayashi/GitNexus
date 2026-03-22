@@ -309,8 +309,22 @@ const generateHeuristicLabel = (
     if (parts.length >= 2) {
       const folder = parts[parts.length - 2];
       // Skip generic folder names
-      if (!['src', 'lib', 'core', 'utils', 'common', 'shared', 'helpers'].includes(folder.toLowerCase())) {
+      const GENERIC_FOLDERS = new Set([
+        'src', 'lib', 'core', 'utils', 'common', 'shared', 'helpers',
+        'internal', 'pkg', 'app', 'modules', 'components', 'services',
+        'controllers', 'models', 'views', 'types', 'interfaces',
+        'test', 'tests', '__tests__', 'spec', 'specs',
+        'dist', 'build', 'out', 'bin', 'scripts',
+      ]);
+      if (!GENERIC_FOLDERS.has(folder.toLowerCase())) {
         folderCounts.set(folder, (folderCounts.get(folder) || 0) + 1);
+      }
+      // Also try grandparent directory for deeper nesting (e.g., src/auth/middleware/)
+      if (parts.length >= 3) {
+        const grandparent = parts[parts.length - 3];
+        if (!GENERIC_FOLDERS.has(grandparent.toLowerCase())) {
+          folderCounts.set(grandparent, (folderCounts.get(grandparent) || 0) + 0.5);
+        }
       }
     }
   });
@@ -344,6 +358,33 @@ const generateHeuristicLabel = (
     if (commonPrefix.length > 2) {
       return commonPrefix.charAt(0).toUpperCase() + commonPrefix.slice(1);
     }
+  }
+
+  // Try dominant node type (e.g., "Functions" or "Classes")
+  const typeCounts = new Map<string, number>();
+  memberIds.forEach(nodeId => {
+    const labels = graph.getNodeAttribute(nodeId, 'labels');
+    const nodeType = Array.isArray(labels) ? labels[0] : (typeof labels === 'string' ? labels : '');
+    if (nodeType && nodeType !== 'Node') {
+      typeCounts.set(nodeType, (typeCounts.get(nodeType) || 0) + 1);
+    }
+  });
+  let maxTypeCount = 0;
+  let dominantType = '';
+  typeCounts.forEach((count, type) => {
+    if (count > maxTypeCount) {
+      maxTypeCount = count;
+      dominantType = type;
+    }
+  });
+  // Use dominant type + most-connected symbol name
+  if (dominantType && names.length > 0) {
+    const sortedNames = names.sort((a, b) => a.length - b.length);
+    const shortestName = sortedNames[0];
+    return `${dominantType}_${shortestName}`;
+  }
+  if (dominantType) {
+    return `${dominantType}_Group_${commNum}`;
   }
 
   // Last resort: generic name with community ID for uniqueness
