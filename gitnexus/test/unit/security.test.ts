@@ -96,7 +96,7 @@ describe('isWriteQuery', () => {
 
 describe('VALID_RELATION_TYPES', () => {
   it('contains exactly the expected 8 types', () => {
-    expect(VALID_RELATION_TYPES.size).toBe(8);
+    expect(VALID_RELATION_TYPES.size).toBe(9);
     expect(VALID_RELATION_TYPES.has('CALLS')).toBe(true);
     expect(VALID_RELATION_TYPES.has('IMPORTS')).toBe(true);
     expect(VALID_RELATION_TYPES.has('EXTENDS')).toBe(true);
