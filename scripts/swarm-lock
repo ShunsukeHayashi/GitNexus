@@ -10,6 +10,7 @@ if (!fs.existsSync(lockDir)) {
 
 const action = process.argv[2];
 const target = process.argv[3] || '';
+const agentId = process.argv[4] || 'unknown';
 const targetSafe = target.replace(/\//g, '__');
 const lockPath = path.join(lockDir, targetSafe);
 
@@ -21,8 +22,8 @@ if (action === 'list') {
     console.error('ERROR: ' + target + ' is locked.');
     process.exit(1);
   }
-  fs.writeFileSync(lockPath, 'LOCKED');
-  console.log('SUCCESS: Locked ' + target);
+  fs.writeFileSync(lockPath, agentId);
+  console.log('SUCCESS: Locked ' + target + ' by ' + agentId);
 } else if (action === 'unlock') {
   if (fs.existsSync(lockPath)) {
     fs.unlinkSync(lockPath);
