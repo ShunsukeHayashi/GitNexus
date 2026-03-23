@@ -54,7 +54,10 @@ function getNextStepHint(toolName: string, args: Record<string, any> | undefined
       return `\n\n---\n**Next:** If planning changes, use impact({target: "${args?.name || '<name>'}", direction: "upstream"${repoParam}}) to check blast radius. To see execution flows, READ gitnexus://repo/${repoPath}/processes.`;
 
     case 'impact':
-      return `\n\n---\n**Next:** Review d=1 items first (WILL BREAK). To check affected execution flows, READ gitnexus://repo/${repoPath}/processes.`;
+      return `\n\n---\n**Next:** Review d=1 items first (WILL BREAK). To check affected execution flows, READ gitnexus://repo/${repoPath}/processes. To generate test skeletons for uncovered nodes, use suggest_tests({symbol: "${args?.target || '<name>'}"${repoParam}}).`;
+
+    case 'suggest_tests':
+      return `\n\n---\n**Next:** Copy the test skeletons to the suggested filePaths, fill in the TODO sections, then run \`npx vitest run\` to validate.`;
 
     case 'detect_changes':
       return `\n\n---\n**Next:** Review affected processes. Use context() on high-risk changed symbols. READ gitnexus://repo/${repoPath}/process/{name} for full execution traces.`;
