@@ -21,6 +21,8 @@ export type NodeLabel =
 export type NodeProperties = {
   name: string,
   filePath: string,
+  /** Repository namespace — set when multi-repo graph is loaded (T012) */
+  repoName?: string,
   startLine?: number,
   endLine?: number,
   language?: string,
@@ -43,11 +45,11 @@ export type NodeProperties = {
   entryPointReason?: string,
 }
 
-export type RelationshipType = 
-  | 'CONTAINS' 
-  | 'CALLS' 
-  | 'INHERITS' 
-  | 'OVERRIDES' 
+export type RelationshipType =
+  | 'CONTAINS'
+  | 'CALLS'
+  | 'INHERITS'
+  | 'OVERRIDES'
   | 'IMPORTS'
   | 'USES'
   | 'DEFINES'
@@ -57,11 +59,13 @@ export type RelationshipType =
   | 'HAS_METHOD'
   | 'MEMBER_OF'
   | 'STEP_IN_PROCESS'
+  /** T012: cross-repository function call resolved by the MCP router */
+  | 'CROSS_REPO_CALL'
 
 export interface GraphNode {
   id:  string,
   label: NodeLabel,
-  properties: NodeProperties,  
+  properties: NodeProperties,
 }
 
 export interface GraphRelationship {
@@ -75,6 +79,10 @@ export interface GraphRelationship {
   reason: string,
   /** Step number for STEP_IN_PROCESS relationships (1-indexed) */
   step?: number,
+  /** Source repository name — set only for CROSS_REPO_CALL edges (T012) */
+  sourceRepo?: string,
+  /** Target repository name — set only for CROSS_REPO_CALL edges (T012) */
+  targetRepo?: string,
 }
 
 export interface KnowledgeGraph {

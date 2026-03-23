@@ -20,6 +20,8 @@ import {
   TOOL_COLOR,
   HIGHLIGHT_COLOR,
   BLAST_COLOR,
+  CROSS_REPO_EDGE_COLOR,
+  getRepoColor,
 } from '../lib/graphNodeUtils';
 import type { UserPresence } from '../core/graph/types';
 
@@ -42,6 +44,8 @@ export interface GraphCanvasOverlayProps {
   onResetCamera:        () => void;
   /** T023: active presence users; if undefined or empty the panel is hidden */
   presenceUsers?:       UserPresence[];
+  /** T012: set of distinct repoNames present in the current graph (may be empty) */
+  repoNames?:           Set<string>;
 }
 
 export function GraphCanvasOverlay({
@@ -53,6 +57,7 @@ export function GraphCanvasOverlay({
   onZoomOut,
   onResetCamera,
   presenceUsers,
+  repoNames,
 }: GraphCanvasOverlayProps) {
   // T023: Only show users who have a focused node (most useful to display)
   const focusedUsers = (presenceUsers ?? []).filter(u => !!u.focusedNodeId);
@@ -204,6 +209,45 @@ export function GraphCanvasOverlay({
             />
             <span className="text-xs text-white/60">Blast Radius</span>
           </div>
+
+          {/* T012: Cross-Repo Call edge legend entry */}
+          <div className="border-t border-white/10 my-1" />
+          <p className="text-xs font-semibold text-white/50 uppercase tracking-wider mb-1">
+            Edge Types
+          </p>
+          <div className="flex items-center gap-2">
+            {/* Dashed line indicator using a short SVG */}
+            <svg width="18" height="10" className="flex-shrink-0" aria-hidden="true">
+              <line
+                x1="1" y1="5" x2="17" y2="5"
+                stroke={CROSS_REPO_EDGE_COLOR}
+                strokeWidth="2"
+                strokeDasharray="4,2"
+              />
+            </svg>
+            <span className="text-xs text-white/60">Cross-Repo Call</span>
+          </div>
+
+          {/* T012: Per-repo cluster colour swatches (shown only when multi-repo) */}
+          {repoNames && repoNames.size >= 2 && (
+            <>
+              <div className="border-t border-white/10 my-1" />
+              <p className="text-xs font-semibold text-white/50 uppercase tracking-wider mb-1">
+                Repo Clusters
+              </p>
+              {Array.from(repoNames).map(repo => (
+                <div key={repo} className="flex items-center gap-2">
+                  <div
+                    className="w-2.5 h-2.5 rounded-sm flex-shrink-0"
+                    style={{ backgroundColor: getRepoColor(repo) }}
+                  />
+                  <span className="text-xs text-white/60 truncate max-w-[120px]" title={repo}>
+                    {repo}
+                  </span>
+                </div>
+              ))}
+            </>
+          )}
         </div>
       </div>
 

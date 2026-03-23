@@ -91,7 +91,15 @@ export const FILTERABLE_LABELS: NodeLabel[] = [
 ];
 
 // Edge/Relation types
-export type EdgeType = 'CONTAINS' | 'DEFINES' | 'IMPORTS' | 'CALLS' | 'EXTENDS' | 'IMPLEMENTS';
+export type EdgeType =
+  | 'CONTAINS'
+  | 'DEFINES'
+  | 'IMPORTS'
+  | 'CALLS'
+  | 'EXTENDS'
+  | 'IMPLEMENTS'
+  /** T012: cross-repository function call resolved by the MCP router */
+  | 'CROSS_REPO_CALL';
 
 export const ALL_EDGE_TYPES: EdgeType[] = [
   'CONTAINS',
@@ -100,6 +108,7 @@ export const ALL_EDGE_TYPES: EdgeType[] = [
   'CALLS',
   'EXTENDS',
   'IMPLEMENTS',
+  'CROSS_REPO_CALL',
 ];
 
 // Default visible edges (CALLS hidden by default to reduce clutter)
@@ -110,14 +119,18 @@ export const DEFAULT_VISIBLE_EDGES: EdgeType[] = [
   'EXTENDS',
   'IMPLEMENTS',
   'CALLS',
+  // T012: cross-repo edges visible by default so they stand out
+  'CROSS_REPO_CALL',
 ];
 
 // Edge display info for UI
 export const EDGE_INFO: Record<EdgeType, { color: string; label: string }> = {
-  CONTAINS: { color: '#2d5a3d', label: 'Contains' },
-  DEFINES: { color: '#0e7490', label: 'Defines' },
-  IMPORTS: { color: '#1d4ed8', label: 'Imports' },
-  CALLS: { color: '#7c3aed', label: 'Calls' },
-  EXTENDS: { color: '#c2410c', label: 'Extends' },
-  IMPLEMENTS: { color: '#be185d', label: 'Implements' },
+  CONTAINS:        { color: '#2d5a3d', label: 'Contains' },
+  DEFINES:         { color: '#0e7490', label: 'Defines' },
+  IMPORTS:         { color: '#1d4ed8', label: 'Imports' },
+  CALLS:           { color: '#7c3aed', label: 'Calls' },
+  EXTENDS:         { color: '#c2410c', label: 'Extends' },
+  IMPLEMENTS:      { color: '#be185d', label: 'Implements' },
+  // T012: distinct orange — renders as dashed line in the 3D view
+  CROSS_REPO_CALL: { color: '#ea580c', label: 'Cross-Repo Call' },
 };
