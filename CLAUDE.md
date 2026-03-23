@@ -1,7 +1,7 @@
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **nexus-core** (2651 symbols, 5913 relationships, 208 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **nexus-core**. Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
@@ -10,8 +10,27 @@ This project is indexed by GitNexus as **nexus-core** (2651 symbols, 5913 relati
 - **MUST run impact analysis before editing any symbol.** Before modifying a function, class, or method, run `gitnexus_impact({target: "symbolName", direction: "upstream"})` and report the blast radius (direct callers, affected processes, risk level) to the user.
 - **MUST run `gitnexus_detect_changes()` before committing** to verify your changes only affect expected symbols and execution flows.
 - **MUST warn the user** if impact analysis returns HIGH or CRITICAL risk before proceeding with edits.
-- When exploring unfamiliar code, use `gitnexus_query({query: "concept"})` to find execution flows instead of grepping. It returns process-grouped results ranked by relevance.
-- When you need full context on a specific symbol — callers, callees, which execution flows it participates in — use `gitnexus_context({name: "symbolName"})`.
+- When exploring unfamiliar code, use `gitnexus_query({query: "concept"})` to find execution flows instead of grepping.
+- When you need full context on a specific symbol, use `gitnexus_context({name: "symbolName"})`.
+
+## Swarm Coordination (Spatial Isolation)
+
+You are operating as an autonomous AI agent in a "Swarm" of 40+ agents. **Sequential waiting is forbidden. You MUST use Spatial Isolation to avoid Git merge conflicts.**
+Before you edit ANY file, you must acquire a lock for it.
+
+1. **Observe & Claim**: Check if the file is locked, and if not, lock it.
+   ```bash
+   node scripts/swarm-lock lock <relative_path_to_file>
+   ```
+2. **Pivot**: If the lock command fails (file is locked by another agent), **DO NOT WAIT**. Immediately abandon the file edit and switch to a different task/file in an isolated area.
+3. **List**: To see the current Agent Radar (all active locks), run:
+   ```bash
+   node scripts/swarm-lock list
+   ```
+4. **Release**: When your commit is pushed or you finish modifying the file, you MUST unlock it:
+   ```bash
+   node scripts/swarm-lock unlock <relative_path_to_file>
+   ```
 
 ## When Debugging
 
@@ -32,6 +51,7 @@ This project is indexed by GitNexus as **nexus-core** (2651 symbols, 5913 relati
 - NEVER ignore HIGH or CRITICAL risk warnings from impact analysis.
 - NEVER rename symbols with find-and-replace — use `gitnexus_rename` which understands the call graph.
 - NEVER commit changes without running `gitnexus_detect_changes()` to check affected scope.
+- **NEVER edit a file without first running `node scripts/swarm-lock lock <file_path>`**.
 
 ## Tools Quick Reference
 
@@ -43,14 +63,6 @@ This project is indexed by GitNexus as **nexus-core** (2651 symbols, 5913 relati
 | `detect_changes` | Pre-commit scope check | `gitnexus_detect_changes({scope: "staged"})` |
 | `rename` | Safe multi-file rename | `gitnexus_rename({symbol_name: "old", new_name: "new", dry_run: true})` |
 | `cypher` | Custom graph queries | `gitnexus_cypher({query: "MATCH ..."})` |
-
-## Impact Risk Levels
-
-| Depth | Meaning | Action |
-|-------|---------|--------|
-| d=1 | WILL BREAK — direct callers/importers | MUST update these |
-| d=2 | LIKELY AFFECTED — indirect deps | Should test |
-| d=3 | MAY NEED TESTING — transitive | Test if critical path |
 
 ## Resources
 
@@ -66,8 +78,9 @@ This project is indexed by GitNexus as **nexus-core** (2651 symbols, 5913 relati
 Before completing any code modification task, verify:
 1. `gitnexus_impact` was run for all modified symbols
 2. No HIGH/CRITICAL risk warnings were ignored
-3. `gitnexus_detect_changes()` confirms changes match expected scope
-4. All d=1 (WILL BREAK) dependents were updated
+3. `node scripts/swarm-lock unlock <file_path>` was run to release your locks
+4. `gitnexus_detect_changes()` confirms changes match expected scope
+5. All d=1 (WILL BREAK) dependents were updated
 
 ## Keeping the Index Fresh
 
@@ -83,10 +96,6 @@ If the index previously included embeddings, preserve them by adding `--embeddin
 npx gitnexus analyze --embeddings
 ```
 
-To check whether embeddings exist, inspect `.gitnexus/meta.json` — the `stats.embeddings` field shows the count (0 means no embeddings). **Running analyze without `--embeddings` will delete any previously generated embeddings.**
-
-> Claude Code users: A PostToolUse hook handles this automatically after `git commit` and `git merge`.
-
 ## CLI
 
 | Task | Read this skill file |
@@ -100,6 +109,6 @@ To check whether embeddings exist, inspect `.gitnexus/meta.json` — the `stats.
 
 <!-- gitnexus:end -->
 
-## Swarm Coordination
-- Read .claude/rules/swarm-coordination.md BEFORE pushing commits or fixing CI failures if you are operating as part of an autonomous swarm.
+## Swarm Coordination Additional Rules
+- Read `.claude/rules/swarm-coordination.md` BEFORE pushing commits or fixing CI failures if you are operating as part of an autonomous swarm.
 - If fixing a failing test, always fetch and rebase on origin/main first.
