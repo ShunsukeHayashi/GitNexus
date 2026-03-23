@@ -1,57 +1,39 @@
-# Miyabi-Nexus Enterprise: Swarm Execution Plan (DAG)
-**Status:** DRAFT
-**Objective:** Orchestrate autonomous agents to complete Enterprise Milestones without Git conflicts, utilizing gent-skill-bus for resource locking and gitnexus for Blast Radius pre-computation.
+# Miyabi-Nexus Enterprise: Spatial Swarm Coordination Protocol
+**Status:** ACTIVE
+**Objective:** Orchestrate autonomous agents to concurrently modify a shared codebase by utilizing Miyabi-Nexus as a real-time spatial map and agent-skill-bus as the synchronization layer.
 
-## 1. The Core Problem: Unplanned Blast Radius Collisions
-Currently, multiple agents are spawned simultaneously on distinct features (e.g., T012, T013, T022, T025). However, these features implicitly modify the same core files (e.g., src/mcp/local/local-backend.ts, src/mcp/server.ts, graph schema constants). This results in:
-- Outdated test assertions causing CI loops.
-- Cannot find module errors due to uncoordinated refactoring.
-- A " last-pusher-wins\ Git rebase conflict.
+## 1. The Paradigm Shift: Spatial Isolation over Sequential Waiting
+The traditional human approach to Git conflicts is sequential merging (DAGs and waiting). 
+In **Agentic Engineering**, this is a bottleneck. We do not want 40 AI agents waiting in line; we want 40 agents working simultaneously without ever colliding.
 
-## 2. The Solution: Pre-Computed Execution DAG + Agent Skill Bus
-Before assigning an Epic or Feature to an agent, the Commander (or a Planning Agent) must execute a **Dry Run Blast Radius Analysis** to map the \Resource Contention Zones\.
+**The Solution:** Agents do not wait for each other. Instead, they use the GitNexus Knowledge Graph to find isolated areas of the codebase (subgraphs) where their Blast Radius does not overlap with any other active agent.
 
-### 2.1 Pre-Computation Phase (The \Plan\)
-For every pending Task (T-xxx), run gitnexus_impact on the entry points.
-- **T012 (UI Clustering):** Modifies gitnexus-web/src/components/*
-- **T013 (Cross-Repo Impact):** Modifies src/mcp/local/local-backend.ts
-- **T022 (Unit Test Gen):** Modifies src/mcp/server.ts, src/mcp/tools.ts, tests.
-- **T025 (AI Cursors):** Modifies src/mcp/server.ts (new endpoints), gitnexus-web/*
+## 2. The Protocol: Observe, Claim, Execute, Pivot
 
-**Contention Matrix:**
-- gitnexus-web/*: T012 vs T025 -> **CONFLICT**
-- src/mcp/server.ts: T022 vs T025 -> **CONFLICT**
-- local-backend.ts: T013 is isolated, but schema changes affect T022 tests -> **DEPENDENCY**
+### Phase 1: Observe (The Nexus Map)
+Before starting a task or touching a file, the agent queries the Miyabi-Nexus API (e.g., /api/active-agents from T025) or uses agent-skill-bus list-locks.
+- *Question:* Is anyone currently modifying the files I need, or the files that directly depend on my files (Blast Radius)?
 
-### 2.2 The Execution DAG (Directed Acyclic Graph)
-Based on the Contention Matrix, the Swarm MUST execute tasks in the following strict order (Levels). Agents in the same Level can run in parallel. An agent cannot start a Level N task until all Level N-1 tasks are merged into main.
+### Phase 2: Claim (The Skill Bus Lock)
+If the required subgraph is clear, the agent claims it.
+- agent-skill-bus lock /src/mcp/server.ts
+- The Miyabi-Nexus Web UI will instantly render a glowing golden aura over server.ts and float the agent's badge in 3D space. All other agents now see this territory as claimed.
 
-#### Level 1: Core Engine & Schema (Unblocks Tests & UI)
-- **T013 (Cross-Repo Impact):** Modifies local-backend.ts.
- - *Lock:* gent-skill-bus lock src/mcp/local/local-backend.ts
-- **T022 (Test Gen):** Modifies server.ts, ools.ts.
- - *Lock:* gent-skill-bus lock src/mcp/server.ts
+### Phase 3: Pivot (Collision Avoidance)
+If an agent attempts to start a task (e.g., T022: Test Gen) and sees that its required files (server.ts) are currently glowing/locked by another agent (e.g., T025: AI Cursor API):
+- **DO NOT WAIT.** Waiting wastes compute.
+- **PIVOT:** The agent dynamically alters its execution plan.
+  - *Example:* Instead of injecting code directly into server.ts, the agent creates a new, isolated file src/mcp/tools/suggest_tests.ts, writes all the logic there, and leaves a single comment (TODO: import and register in server.ts).
+- Once the original lock on server.ts is released, the agent swoops in, makes the 1-line injection, and finishes.
 
-*(Wait for T013 and T022 to be MERGED into main. CI passes.)*
+## 3. Applying the Protocol to Current Tasks
+We are abandoning the previous sequential DAG. Instead, agents will resolve the current traffic jam using spatial pivots.
 
-#### Level 2: Backend API Additions (Depends on Stable Schema)
-- **T025-Backend (AI Cursor Endpoints):** Modifies server.ts to add /api/active-agents.
- - *Constraint:* Must branch from main AFTER Level 1.
- - *Lock:* gent-skill-bus lock src/mcp/server.ts
+- **T012 (UI Clustering):** Safe to execute. Locks gitnexus-web/src/components/GraphCanvas.tsx.
+- **T013 (Cross-Repo Impact):** Safe to execute. Locks src/mcp/local/local-backend.ts.
+- **T022 (Test Gen) vs T025 (AI Cursors):** Both need server.ts.
+  - T025 claims server.ts first.
+  - T022 *pivots*, building its logic in isolated files, avoiding CI conflicts, and linking them only when T025 releases the lock.
 
-*(Wait for T025-Backend to be MERGED.)*
-
-#### Level 3: Web UI Consumption (Parallel safe, isolated components)
-- **T012 (UI Clustering):** Modifies graph rendering for namespaces.
- - *Lock:* gent-skill-bus lock gitnexus-web/src/components/GraphCanvas.tsx
-- **T025-Frontend (AI Cursor UI):** Consumes /api/active-agents.
- - *Lock:* gent-skill-bus lock gitnexus-web/src/components/Header.tsx (or overlay component).
-
-## 3. Operational Protocol for Agents
-When an agent is spawned via un-enterprise-sprint.sh, it will:
-1. Parse this SWARM-DAG-PLAN.md file.
-2. Identify its assigned Task ID (e.g., T025).
-3. Check the DAG Level of its task.
-4. If the task is Level 2, but Level 1 is not complete (check gh pr list --state open), the agent will **YIELD and exit** (or sleep).
-5. If cleared to start, the agent executes gent-skill-bus lock <files> for its Contention Matrix zone.
-6. Upon merging, the agent executes gent-skill-bus unlock <files>.
+## 4. Conclusion
+Miyabi-Nexus is not just a visualization tool for humans. It is the **Air Traffic Control (ATC) radar for AI Swarms**. By combining this map with the agent-skill-bus radio, we achieve true massively parallel software development.
