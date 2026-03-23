@@ -1,7 +1,8 @@
 # Miyabi Nexus (Enterprise Edition)
 
 <div align="center">
-  <h2>The Code Intelligence Platform & Spatial Radar for Autonomous AI Swarms</h2>
+  <img src="https://raw.githubusercontent.com/ShunsukeHayashi/Miyabi-Nexus/main/docs/assets/radar-demo.png" alt="Agent Radar UI" width="800" />
+  <h2>The Spatial Radar & Air Traffic Control for Autonomous AI Swarms</h2>
   <p>
     <b>Miyabi Nexus</b> is an advanced enterprise fork of the GitNexus project. It transforms your entire codebase into a 3D-navigable knowledge graph and provides real-time Blast Radius analysis.
     Crucially, it acts as an <b>Air Traffic Control Radar for AI Agents</b>, enabling over 40 autonomous AI agents to edit code simultaneously without Git conflicts via the <i>Spatial Swarm Coordination Protocol</i>.
@@ -17,13 +18,22 @@
   </a>
 </div>
 
+## 🌌 The Problem: The AI Deadlock
+When you unleash 40 AI agents on a repository, they all try to edit the same core files. The result? Endless Git merge conflicts, broken CI pipelines, and agents stuck in a loop trying to fix each other's code. **Sequential waiting (DAGs) is too slow.**
+
+## 🛸 The Solution: Spatial Isolation (Agent Radar)
+Miyabi Nexus solves this using **physics-based Spatial Isolation**.
+1. **Observe**: Agents use the 3D graph to calculate the "Blast Radius" of their intended changes.
+2. **Claim (Lock)**: Agents project a "Magnetic Field" (Lock) over the files they need via the MCP backend.
+3. **Pivot**: If an agent encounters another agent's magnetic field, it doesn't wait. It instantly **pivots** to a different task.
+
 ## ✨ Enterprise Features
 
-- **Spatial Swarm Coordination (Agent Radar)**: Real-time visualization of active AI agents (Golden Auras) editing your codebase. Agents autonomously detect locks and *Pivot* to avoid Git merge conflicts.
+- **Apple-Style 3D Radar UI**: A beautiful, minimalist 3D WebGL interface (System Grays, White Background) that prioritizes clarity. Watch AI agents work in real-time (Golden Auras = Locked regions).
+- **Backend-Native Swarm Control**: All lock coordination (`gitnexus_lock_resource`) happens natively at the CLI/MCP layer. The UI is just a radar; it cannot crash the swarm.
 - **Cross-Repo Federation (MCP)**: Analyze API calls and dependencies across multiple organizational repositories simultaneously.
 - **Enterprise RAG & Persistence**: Zero-cost re-indexing with persistent Vector DBs. The AI remembers historical context and architectural decisions across sessions.
 - **Autonomous CI/CD Reviewer**: Automatically runs on GitHub PRs. If a PR breaks the build, the AI swarm will autonomously pull, self-heal, and push fixes without human intervention.
-- **Apple-Style 3D Radar UI**: A beautiful, minimalist 3D WebGL interface that prioritizes clarity over visual noise.
 
 ## 🚀 Quick Start
 
@@ -40,7 +50,7 @@ miyabi-nexus start
 
 ## 🤖 Swarm API (For AI Agents)
 
-AI Agents (such as OpenClaw or Claude Code) can interact with Miyabi Nexus via the built-in MCP (Model Context Protocol) to achieve spatial isolation:
+AI Agents (such as OpenClaw, Claude Code, or Cursor) interact with Miyabi Nexus via the built-in MCP (Model Context Protocol) to achieve spatial isolation:
 
 - `gitnexus_lock_resource`: Claim a spatial region (Blast Radius) before editing.
 - `gitnexus_list_locks`: Observe active locks to Pivot away from crowded files.
