@@ -1,0 +1,31 @@
+#!/usr/bin/env node
+import fs from 'fs';
+import path from 'path';
+
+const lockDir = path.join(process.cwd(), '.gitnexus', 'locks');
+
+if (!fs.existsSync(lockDir)) {
+  fs.mkdirSync(lockDir, { recursive: true });
+}
+
+const action = process.argv[2];
+const target = process.argv[3] || '';
+const targetSafe = target.replace(/\//g, '__');
+const lockPath = path.join(lockDir, targetSafe);
+
+if (action === 'list') {
+  const files = fs.readdirSync(lockDir);
+  console.log(JSON.stringify(files.map(f => f.replace(/__/g, '/'))));
+} else if (action === 'lock') {
+  if (fs.existsSync(lockPath)) {
+    console.error('ERROR: ' + target + ' is locked.');
+    process.exit(1);
+  }
+  fs.writeFileSync(lockPath, 'LOCKED');
+  console.log('SUCCESS: Locked ' + target);
+} else if (action === 'unlock') {
+  if (fs.existsSync(lockPath)) {
+    fs.unlinkSync(lockPath);
+  }
+  console.log('SUCCESS: Unlocked ' + target);
+}
