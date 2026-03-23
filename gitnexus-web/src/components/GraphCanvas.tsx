@@ -80,26 +80,31 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(({ pr
     visibleLabels,
     visibleEdgeTypes,
     animatedNodes,
+    serverBaseUrl,
   } = useAppState();
 
   const fgRef = useRef<ForceGraphMethods | undefined>(undefined);
-  const [swarmLocks, setSwarmLocks] = useState<{file: string, agent: string}[]>([]);
-  
-  // Poll for agent locks
+  const [swarmLocks, setSwarmLocks] = useState<{ file: string; agent: string }[]>([]);
+
+  // T025: Poll /api/swarm-state for file-level agent locks (swarm-lock CLI).
+  // Uses serverBaseUrl so the request always goes to the GitNexus server (e.g. :4747),
+  // not the Vite dev server. Disabled when no server is connected.
   useEffect(() => {
+    if (!serverBaseUrl) return;
+    let cancelled = false;
     const fetchLocks = async () => {
       try {
-        const res = await fetch('/api/swarm-state');
-        if (res.ok) {
+        const res = await fetch(`${serverBaseUrl}/api/swarm-state`);
+        if (res.ok && !cancelled) {
           const data = await res.json();
-          setSwarmLocks(data.locks || []);
+          setSwarmLocks(Array.isArray(data.locks) ? data.locks : []);
         }
-      } catch (e) { /* ignore */ }
+      } catch { /* server unreachable — silently ignore */ }
     };
-    fetchLocks();
-    const interval = setInterval(fetchLocks, 2000);
-    return () => clearInterval(interval);
-  }, []);
+    void fetchLocks();
+    const interval = setInterval(() => void fetchLocks(), 2000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [serverBaseUrl]);
 
   const [graphData, setGraphData] = useState<{ nodes: GraphNode[]; links: GraphLink[] }>({
     nodes: [],

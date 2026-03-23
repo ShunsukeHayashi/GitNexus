@@ -329,22 +329,26 @@ export const createServer = async (port: number, host: string = '127.0.0.1') => 
 
   // List all registered repos
 
-  /** GET /api/swarm-state — list all active agent locks */
-  app.get('/api/swarm-state', authenticateOptional, (_req, res) => {
-    const fsLib = require('fs');
-    const pathLib = require('path');
-    const lockDir = pathLib.join(process.cwd(), '.gitnexus', 'locks');
-    let locks = [];
-    if (fsLib.existsSync(lockDir)) {
-      const files = fsLib.readdirSync(lockDir);
-      locks = files.map(f => {
-        try {
-          return {
-            file: f.replace(/__/g, '/'),
-            agent: fsLib.readFileSync(pathLib.join(lockDir, f), 'utf8').trim() || 'unknown'
-          };
-        } catch(e) { return null; }
-      }).filter(Boolean);
+  /** GET /api/swarm-state — list all active agent locks read from .gitnexus/locks/ */
+  app.get('/api/swarm-state', authenticateOptional, async (_req, res) => {
+    const lockDir = path.join(process.cwd(), '.gitnexus', 'locks');
+    let locks: { file: string; agent: string }[] = [];
+    try {
+      const files = await fs.readdir(lockDir);
+      locks = (
+        await Promise.all(
+          files.map(async f => {
+            try {
+              const agent = (await fs.readFile(path.join(lockDir, f), 'utf8')).trim() || 'unknown';
+              return { file: f.replace(/__/g, '/'), agent };
+            } catch {
+              return null;
+            }
+          }),
+        )
+      ).filter((x): x is { file: string; agent: string } => x !== null);
+    } catch {
+      // lockDir does not exist yet — return empty array
     }
     res.json({ locks });
   });

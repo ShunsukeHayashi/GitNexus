@@ -216,6 +216,29 @@ function _cachedAgentAuraMat(color: THREE.Color, opacity: number): THREE.MeshBas
   return _agentAuraMatCache.get(k)!;
 }
 
+// Cache for T025 agent name badge textures — keyed by agent name string.
+// Avoids recreating a <canvas> + CanvasTexture on every render tick.
+const _agentBadgeTexCache = new Map<string, THREE.CanvasTexture>();
+
+function _cachedAgentBadgeTex(name: string): THREE.CanvasTexture {
+  if (!_agentBadgeTexCache.has(name)) {
+    const canvas = document.createElement('canvas');
+    canvas.width  = 256;
+    canvas.height = 64;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.clearRect(0, 0, 256, 64);
+      ctx.font         = 'Bold 20px Arial, sans-serif';
+      ctx.fillStyle    = '#ff9900';
+      ctx.textAlign    = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(name, 128, 32);
+    }
+    _agentBadgeTexCache.set(name, new THREE.CanvasTexture(canvas));
+  }
+  return _agentBadgeTexCache.get(name)!;
+}
+
 // ---------------------------------------------------------------------------
 // buildNodeObject — MeshPhong sphere + optional glow halo
 // Reuses cached geometries/materials (T004) to minimise GPU allocations per frame.
@@ -336,25 +359,17 @@ export function buildNodeObject(node: GraphNode, agentNames?: string[]): THREE.G
       _cachedAgentAuraMat(auraColor, 0.35),
     ));
 
-    // Orange canvas-text badge floating above the aura — one badge per agent
+    // Orange canvas-text badge floating above the aura — one badge per agent.
+    // Textures are module-level cached so no canvas/texture allocation occurs per frame.
     agentNames.forEach((name, i) => {
-      const canvas = document.createElement('canvas');
-      canvas.width  = 256;
-      canvas.height = 64;
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.clearRect(0, 0, 256, 64);
-        ctx.font      = 'Bold 20px Arial, sans-serif';
-        ctx.fillStyle = '#ff9900';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(name, 128, 32);
-      }
-      const tex        = new THREE.CanvasTexture(canvas);
-      const spriteMat  = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
-      const sprite     = new THREE.Sprite(spriteMat);
+      const spriteMat = new THREE.SpriteMaterial({
+        map:       _cachedAgentBadgeTex(name),
+        transparent: true,
+        depthTest:   false,
+      });
+      const sprite = new THREE.Sprite(spriteMat);
       sprite.scale.set(18, 4.5, 1);
-      // Stack badges above the aura: first agent at top, subsequent ones offset down
+      // Stack badges above the aura; each subsequent agent offset further up
       sprite.position.set(0, auraRadius + 4 + i * 5, 0);
       group.add(sprite);
     });
