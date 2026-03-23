@@ -299,6 +299,15 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(({ pr
     [activeAgentNames, swarmLocks],
   );
 
+  // T025: react-force-graph-3d caches nodeThreeObject results per node and does
+  // NOT automatically re-invoke the callback when only the callback reference
+  // changes. Call refresh() whenever agent presence changes so all node Three.js
+  // objects are rebuilt with the latest aura/badge state — without restarting
+  // the force simulation.
+  useEffect(() => {
+    (fgRef.current as any)?.refresh?.();
+  }, [activeAgentNames, swarmLocks]);
+
   // ---------------------------------------------------------------------------
   // T012: CROSS_REPO_CALL dashed-line Three.js object.
   // react-force-graph-3d supports linkThreeObject + linkPositionUpdate to render
