@@ -303,6 +303,32 @@ export const createServer = async (port: number, host: string = '127.0.0.1') => 
   });
 
   // List all registered repos
+
+  /** GET /api/swarm-state — list all active agent locks */
+  app.get('/api/swarm-state', authenticateOptional, (_req, res) => {
+    const fsLib = require('fs');
+    const pathLib = require('path');
+    const lockDir = pathLib.join(process.cwd(), '.gitnexus', 'locks');
+    let locks = [];
+    if (fsLib.existsSync(lockDir)) {
+      const files = fsLib.readdirSync(lockDir);
+      locks = files.map(f => {
+        try {
+          return {
+            file: f.replace(/__/g, '/'),
+            agent: fsLib.readFileSync(pathLib.join(lockDir, f), 'utf8').trim() || 'unknown'
+          };
+        } catch(e) { return null; }
+      }).filter(Boolean);
+    }
+    res.json({ locks });
+  });
+
+  /** POST /api/swarm-state — Broadcast a lock update */
+  app.post('/api/swarm-state', authenticateOptional, (req, res) => {
+    res.json({ ok: true });
+  });
+
   app.get('/api/repos', authenticateOptional, async (_req, res) => {
     try {
       const repos = await listRegisteredRepos();

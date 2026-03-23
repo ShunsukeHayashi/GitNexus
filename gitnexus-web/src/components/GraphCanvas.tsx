@@ -81,6 +81,24 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(({ pr
   } = useAppState();
 
   const fgRef = useRef<ForceGraphMethods | undefined>(undefined);
+  const [swarmLocks, setSwarmLocks] = useState<{file: string, agent: string}[]>([]);
+  
+  // Poll for agent locks
+  useEffect(() => {
+    const fetchLocks = async () => {
+      try {
+        const res = await fetch('/api/swarm-state');
+        if (res.ok) {
+          const data = await res.json();
+          setSwarmLocks(data.locks || []);
+        }
+      } catch (e) { /* ignore */ }
+    };
+    fetchLocks();
+    const interval = setInterval(fetchLocks, 2000);
+    return () => clearInterval(interval);
+  }, []);
+
   const [graphData, setGraphData] = useState<{ nodes: GraphNode[]; links: GraphLink[] }>({
     nodes: [],
     links: [],
@@ -243,7 +261,38 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(({ pr
     fg.d3ReheatSimulation();
   }, [graphData]);
 
-  const nodeThreeObject = useCallback((node: unknown) => buildNodeObject(node as GraphNode), []);
+    const nodeThreeObject = useCallback((node: unknown) => {
+    const gn = node as GraphNode;
+    const baseObject = buildNodeObject(gn);
+    
+    // Agent Radar: Golden Aura for locked nodes
+    const isLocked = swarmLocks.find(l => l.file === gn.id || (gn.filePath && l.file === gn.filePath));
+    if (isLocked) {
+      const geometry = new THREE.SphereGeometry(6, 16, 16);
+      const material = new THREE.MeshBasicMaterial({ color: 0xffd700, transparent: true, opacity: 0.4 });
+      const aura = new THREE.Mesh(geometry, material);
+      
+      // Text badge for agent name
+      const canvas = document.createElement('canvas');
+      canvas.width = 256; canvas.height = 64;
+      const context = canvas.getContext('2d');
+      if (context) {
+        context.font = 'Bold 24px Arial';
+        context.fillStyle = '#ff9900';
+        context.textAlign = 'center';
+        context.fillText(isLocked.agent, 128, 40);
+        const tex = new THREE.CanvasTexture(canvas);
+        const spriteMat = new THREE.SpriteMaterial({ map: tex, transparent: true });
+        const sprite = new THREE.Sprite(spriteMat);
+        sprite.scale.set(20, 5, 1);
+        sprite.position.y = 8;
+        aura.add(sprite);
+      }
+      
+      baseObject.add(aura);
+    }
+    return baseObject;
+  }, [swarmLocks]);
 
   // ---------------------------------------------------------------------------
   // T012: CROSS_REPO_CALL dashed-line Three.js object.
