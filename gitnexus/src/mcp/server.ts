@@ -187,7 +187,15 @@ export function createMCPServer(backend: LocalBackend): Server {
 
       const result = await backend.callTool(name, args);
       const resultText = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
-      const hint = getNextStepHint(name, args as Record<string, any> | undefined);
+      let hint = getNextStepHint(name, args as Record<string, any> | undefined);
+
+      // Append cross-repo hint for impact tool when remote repos are affected
+      if (name === 'impact' && result && typeof result === 'object') {
+        const crossRepo = (result as any).cross_repo_impact;
+        if (crossRepo && typeof crossRepo.total_remote_affected === 'number' && crossRepo.total_remote_affected > 0) {
+          hint += ` Remote repos affected: ${crossRepo.total_remote_affected}. See cross_repo_impact field.`;
+        }
+      }
 
       return {
         content: [

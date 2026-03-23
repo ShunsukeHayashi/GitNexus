@@ -20,6 +20,7 @@ import {
 } from '../../storage/repo-manager.js';
 import { ProjectMemoryStore, type MemoryEntry } from '../../storage/project-memory.js';
 import { TestGenerator } from './test-generator.js';
+import { MCPRouter } from '../router.js';
 // AI context generation is CLI-only (gitnexus analyze)
 // import { generateAIContextFiles } from '../../cli/ai-context.js';
 
@@ -1611,6 +1612,117 @@ export class LocalBackend {
       risk = 'MEDIUM';
     }
 
+    // ── Cross-repo blast radius via CROSS_REPO_CALL edges ──────────
+    // Always include cross_repo_impact in the result.
+    // 1. Query for any CROSS_REPO_CALL edges originating from the target symbol.
+    // 2. If found and GITNEXUS_REMOTE_INSTANCES is set, query each targetRepo via MCPRouter.
+    // 3. Best-effort: local result is always returned even if remote queries fail.
+    let crossRepoImpact: {
+      total_remote_affected: number;
+      remote_instances: Array<{
+        instanceId: string;
+        instanceUrl: string;
+        repoName: string;
+        affected_count: number;
+        error?: string;
+      }>;
+      note: string;
+    };
+
+    try {
+      // Find CROSS_REPO_CALL edges where source is our target symbol
+      const crossRepoRows = await executeParameterized(repo.id, `
+        MATCH (src)-[r:CodeRelation {type: 'CROSS_REPO_CALL'}]->(dst)
+        WHERE src.name = $symbolName
+        RETURN r.targetRepo AS targetRepo, dst.name AS targetSymbol, r.confidence AS confidence
+        LIMIT 20
+      `, { symbolName: target }).catch(() => []);
+
+      if (crossRepoRows.length === 0) {
+        crossRepoImpact = {
+          total_remote_affected: 0,
+          remote_instances: [],
+          note: 'No cross-repo calls detected.',
+        };
+      } else {
+        const hasRemoteInstances = !!process.env.GITNEXUS_REMOTE_INSTANCES?.trim();
+
+        if (!hasRemoteInstances) {
+          crossRepoImpact = {
+            total_remote_affected: 0,
+            remote_instances: [],
+            note: `CROSS_REPO_CALL edges detected (${crossRepoRows.length}). Set GITNEXUS_REMOTE_INSTANCES to analyze cross-repo blast radius.`,
+          };
+        } else {
+          // Query each unique targetRepo via MCPRouter
+          const router = new MCPRouter();
+
+          // Group cross-repo calls by targetSymbol (first match per target)
+          const targetSymbols = [...new Set(
+            crossRepoRows.map((r: any) => (r.targetSymbol || r[1]) as string).filter(Boolean)
+          )];
+
+          // Aggregate query for each target symbol, collecting affected counts
+          const remoteInstanceEntries: Array<{
+            instanceId: string;
+            instanceUrl: string;
+            repoName: string;
+            affected_count: number;
+            error?: string;
+          }> = [];
+
+          for (const targetSymbol of targetSymbols) {
+            try {
+              const aggregated = await router.aggregateQuery(targetSymbol, undefined, 10);
+              for (const agg of aggregated) {
+                const existingIdx = remoteInstanceEntries.findIndex(
+                  e => e.instanceId === agg.instanceId && e.repoName === agg.repoName
+                );
+                const affectedCount = Array.isArray(agg.results) ? agg.results.length : 0;
+                if (existingIdx >= 0) {
+                  remoteInstanceEntries[existingIdx].affected_count += affectedCount;
+                } else {
+                  remoteInstanceEntries.push({
+                    instanceId: agg.instanceId,
+                    instanceUrl: agg.instanceUrl,
+                    repoName: agg.repoName,
+                    affected_count: affectedCount,
+                    ...(agg.error ? { error: agg.error } : {}),
+                  });
+                }
+              }
+            } catch (remoteErr: unknown) {
+              const msg = remoteErr instanceof Error ? remoteErr.message : String(remoteErr);
+              remoteInstanceEntries.push({
+                instanceId: 'unknown',
+                instanceUrl: '',
+                repoName: '*',
+                affected_count: 0,
+                error: `Remote query failed for "${targetSymbol}": ${msg}`,
+              });
+            }
+          }
+
+          const totalRemote = remoteInstanceEntries.reduce((sum, e) => sum + e.affected_count, 0);
+          crossRepoImpact = {
+            total_remote_affected: totalRemote,
+            remote_instances: remoteInstanceEntries,
+            note: totalRemote > 0
+              ? `CROSS_REPO_CALL edges detected. ${totalRemote} symbols affected across ${remoteInstanceEntries.length} remote instance(s).`
+              : `CROSS_REPO_CALL edges detected (${crossRepoRows.length}). Remote instances reachable but no results returned.`,
+          };
+        }
+      }
+    } catch (crossRepoErr: unknown) {
+      // Cross-repo query failed — return local result unaffected
+      const msg = crossRepoErr instanceof Error ? crossRepoErr.message : String(crossRepoErr);
+      crossRepoImpact = {
+        total_remote_affected: 0,
+        remote_instances: [],
+        note: `Cross-repo traversal failed: ${msg}`,
+      };
+    }
+
     return {
       target: {
         id: symId,
@@ -1630,6 +1742,7 @@ export class LocalBackend {
       affected_processes: affectedProcesses,
       affected_modules: affectedModules,
       byDepth: grouped,
+      cross_repo_impact: crossRepoImpact,
     };
   }
 
